@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 export default function Login({ onAuth }) {
   const [mode, setMode] = useState('login') // 'login' | 'signup'
-  const [form, setForm] = useState({ email: '', name: '', password: '' })
+  const [form, setForm] = useState({ email: '', name: '', password: '', org_name: '' })
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -15,7 +15,7 @@ export default function Login({ onAuth }) {
     try {
       const endpoint = isSignup ? '/api/auth/register' : '/api/auth/login'
       const body = isSignup
-        ? { email: form.email, name: form.name, password: form.password }
+        ? { email: form.email, name: form.name, password: form.password, org_name: form.org_name }
         : { email: form.email, password: form.password }
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -27,7 +27,7 @@ export default function Login({ onAuth }) {
         setError(data.detail || 'Something went wrong.')
         return
       }
-      onAuth(data.token, data.user)
+      onAuth(data.token, data.user, data.org)
     } catch {
       setError('Could not reach the server. Is the API running?')
     } finally {
@@ -84,6 +84,14 @@ export default function Login({ onAuth }) {
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               required
+              style={inputStyle}
+            />
+          )}
+          {isSignup && (
+            <input
+              placeholder="Organization name (e.g. Acme Inc)"
+              value={form.org_name}
+              onChange={e => setForm(f => ({ ...f, org_name: e.target.value }))}
               style={inputStyle}
             />
           )}

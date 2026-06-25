@@ -6,15 +6,18 @@ import ChatArea from './components/ChatArea'
 import InputBar from './components/InputBar'
 import ToastContainer from './components/Toast'
 import Login from './components/Login'
+import Onboarding from './components/Onboarding'
 
 export default function App() {
   const [theme, setTheme] = useState('dark')
   const [token, setToken] = useState(() => localStorage.getItem('axis_token'))
   const [user, setUser] = useState(null)
+  const [org, setOrg] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [teamFilter, setTeamFilter] = useState(null)
   const [messages, setMessages] = useState([])
-  const [history, setHistory] = useState([])
+  const [conversations, setConversations] = useState([])
+  const [currentConvId, setCurrentConvId] = useState(null)
   const [syncLog, setSyncLog] = useState([])
   const [loading, setLoading] = useState(false)
   const [toasts, setToasts] = useState([])
@@ -30,24 +33,66 @@ export default function App() {
     if (!token) { setAuthChecked(true); return }
     fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then(d => setUser(d.user))
-      .catch(() => { localStorage.removeItem('axis_token'); setToken(null); setUser(null) })
+      .then(d => { setUser(d.user); setOrg(d.org) })
+      .catch(() => { localStorage.removeItem('axis_token'); setToken(null); setUser(null); setOrg(null) })
       .finally(() => setAuthChecked(true))
   }, [token])
 
-  const handleAuth = useCallback((tok, usr) => {
+  const handleAuth = useCallback((tok, usr, orgInfo) => {
     localStorage.setItem('axis_token', tok)
     setToken(tok)
     setUser(usr)
+    setOrg(orgInfo)
   }, [])
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('axis_token')
     setToken(null)
     setUser(null)
+    setOrg(null)
     setMessages([])
-    setHistory([])
+    setConversations([])
+    setCurrentConvId(null)
   }, [])
+
+  // ── Conversations (multi-chat) ──────────────────────────────────────────────
+  const loadConversations = useCallback(() => {
+    if (!token) return
+    fetch('/api/conversations', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(d => setConversations(d.conversations || []))
+      .catch(() => {})
+  }, [token])
+
+  useEffect(() => { if (user) loadConversations() }, [user, loadConversations])
+
+  const handleNewChat = useCallback(() => {
+    setMessages([])
+    setCurrentConvId(null)
+  }, [])
+
+  const handleSelectConversation = useCallback(async (id) => {
+    if (id === currentConvId) return
+    try {
+      const res = await fetch(`/api/conversations/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      let lastUser = ''
+      const uiMsgs = (data.messages || []).map(m => {
+        if (m.role === 'user') { lastUser = m.content; return { role: 'user', content: m.content } }
+        return { role: 'axis', id: crypto.randomUUID(), question: lastUser, content: m.content, sources: m.sources || [], feedback: null }
+      })
+      setMessages(uiMsgs)
+      setCurrentConvId(id)
+    } catch {}
+  }, [token, currentConvId])
+
+  const handleDeleteConversation = useCallback(async (id) => {
+    try {
+      await fetch(`/api/conversations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    } catch {}
+    if (id === currentConvId) { setMessages([]); setCurrentConvId(null) }
+    setConversations(prev => prev.filter(c => c.id !== id))
+  }, [token, currentConvId])
 
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(t => t.id !== id))
@@ -87,6 +132,11 @@ export default function App() {
   const handleSend = async (question) => {
     if (!question.trim() || loading) return
 
+    // Build the API history from the current on-screen messages (this conversation).
+    const apiHistory = messages
+      .map(m => ({ role: m.role === 'axis' ? 'assistant' : 'user', content: m.content }))
+      .slice(-10)
+
     const userMsg = { role: 'user', content: question }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
@@ -101,7 +151,8 @@ export default function App() {
         body: JSON.stringify({
           question,
           team_filter: teamFilter || undefined,
-          history: history.slice(-10),
+          history: apiHistory,
+          conversation_id: currentConvId || undefined,
         }),
       })
       const data = await res.json()
@@ -114,7 +165,10 @@ export default function App() {
         feedback: null,   // null | 1 | -1
       }
       setMessages(prev => [...prev, axisMsg])
-      setHistory(prev => [...prev, { role: 'user', content: question }, { role: 'assistant', content: data.answer }])
+      if (data.conversation_id && data.conversation_id !== currentConvId) {
+        setCurrentConvId(data.conversation_id)
+      }
+      loadConversations()   // refresh the chat list (new chat appears / reorders)
     } catch (err) {
       setMessages(prev => [...prev, { role: 'axis', content: 'Sorry, something went wrong. Please try again.', sources: [] }])
     } finally {
@@ -147,10 +201,7 @@ export default function App() {
     }
   }, [token])
 
-  const handleClearChat = () => {
-    setMessages([])
-    setHistory([])
-  }
+  const handleClearChat = handleNewChat
 
   // Wait until we've checked the stored token before deciding what to render
   if (!authChecked) {
@@ -160,6 +211,17 @@ export default function App() {
   // Not logged in → show the login / sign-up screen
   if (!user) {
     return <Login onAuth={handleAuth} />
+  }
+
+  // Logged in but the org hasn't finished onboarding → connection wizard
+  if (org && org.onboarded === false) {
+    return (
+      <Onboarding
+        token={token}
+        orgName={org.name}
+        onComplete={() => setOrg(prev => ({ ...prev, onboarded: true }))}
+      />
+    )
   }
 
   return (
@@ -173,6 +235,12 @@ export default function App() {
         onSyncDone={(log) => setSyncLog(log)}
         onClearChat={handleClearChat}
         addToast={addToast}
+        token={token}
+        conversations={conversations}
+        currentConvId={currentConvId}
+        onNewChat={handleNewChat}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Header teamFilter={teamFilter} user={user} onLogout={handleLogout} />

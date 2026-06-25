@@ -66,16 +66,16 @@ def decode_token(token: str) -> Optional[dict]:
 
 # ── User CRUD ─────────────────────────────────────────────────────────────────
 
-def create_user(email: str, name: str, password: str) -> dict:
+def create_user(email: str, name: str, password: str, org_id: int) -> dict:
     email = email.strip().lower()
     conn = get_conn()
     try:
         cur = conn.execute(
-            "INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)",
-            (email, name.strip(), hash_password(password), now_iso()),
+            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?)",
+            (email, name.strip(), hash_password(password), now_iso(), org_id),
         )
         conn.commit()
-        return {"id": cur.lastrowid, "email": email, "name": name.strip()}
+        return {"id": cur.lastrowid, "email": email, "name": name.strip(), "org_id": org_id}
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=409, detail="An account with that email already exists.")
     finally:
@@ -91,14 +91,14 @@ def authenticate(email: str, password: str) -> dict:
         conn.close()
     if not row or not verify_password(password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    return {"id": row["id"], "email": row["email"], "name": row["name"]}
+    return {"id": row["id"], "email": row["email"], "name": row["name"], "org_id": row["org_id"]}
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
     conn = get_conn()
     try:
         row = conn.execute(
-            "SELECT id, email, name FROM users WHERE id = ?", (user_id,)
+            "SELECT id, email, name, org_id FROM users WHERE id = ?", (user_id,)
         ).fetchone()
     finally:
         conn.close()

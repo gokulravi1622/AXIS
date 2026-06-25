@@ -38,3 +38,4 @@ sentence_transformers/
 .idea/
 .vscode/
 *.swp
+.axis_key

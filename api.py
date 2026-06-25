@@ -13,8 +13,14 @@ from query import ask
 from contribute import submit_context, get_doc_count
 from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
-from db import init_db
+from db import (
+    init_db, create_organization, get_organization, set_org_onboarded,
+    list_connections, get_connection_config, upsert_connection, delete_connection,
+    create_conversation, list_conversations, add_message,
+    get_conversation_messages, delete_conversation,
+)
 from auth import create_user, authenticate, create_token, get_current_user, get_optional_user
+import connections as conn_helpers
 
 app = FastAPI(title="AXIS API")
 
@@ -38,6 +44,7 @@ class AskRequest(BaseModel):
     question: str
     team_filter: Optional[str] = None
     history: list = []
+    conversation_id: Optional[int] = None
 
 
 class ContributeRequest(BaseModel):
@@ -56,6 +63,7 @@ class RegisterRequest(BaseModel):
     email: str
     name: str
     password: str
+    org_name: Optional[str] = ""
 
 
 class LoginRequest(BaseModel):
@@ -71,6 +79,11 @@ class FeedbackRequest(BaseModel):
     vote: int  # 1 = up, -1 = down, 0 = clear
 
 
+class ConnectionRequest(BaseModel):
+    provider: str
+    config: dict = {}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
@@ -80,9 +93,14 @@ def health():
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+def _org_payload(org_id) -> dict:
+    org = get_organization(org_id) if org_id else None
+    return org or {"id": None, "name": "", "onboarded": True}
+
+
 def _auth_response(user: dict) -> dict:
     token = create_token(user["id"], user["email"])
-    return {"token": token, "user": user}
+    return {"token": token, "user": user, "org": _org_payload(user.get("org_id"))}
 
 
 @app.post("/api/auth/register")
@@ -93,7 +111,8 @@ def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
     if not req.name.strip():
         raise HTTPException(status_code=400, detail="Name is required.")
-    user = create_user(req.email, req.name, req.password)
+    org_id = create_organization(req.org_name or f"{req.name.strip()}'s workspace")
+    user = create_user(req.email, req.name, req.password, org_id)
     return _auth_response(user)
 
 
@@ -105,7 +124,48 @@ def login(req: LoginRequest):
 
 @app.get("/api/auth/me")
 def me(user: dict = Depends(get_current_user)):
-    return {"user": user}
+    return {"user": user, "org": _org_payload(user.get("org_id"))}
+
+
+# ── Onboarding / connections ──────────────────────────────────────────────────
+
+@app.get("/api/connections")
+def get_connections(user: dict = Depends(get_current_user)):
+    conns = list_connections(user["org_id"])
+    # annotate each connection with the team(s) its docs are filed under (not secret)
+    for c in conns:
+        cfg = get_connection_config(user["org_id"], c["provider"]) or {}
+        c["teams"] = conn_helpers.connection_teams(c["provider"], cfg)
+    return {"providers": conn_helpers.PROVIDERS, "connections": conns}
+
+
+@app.post("/api/connections/test")
+def test_connection(req: ConnectionRequest, user: dict = Depends(get_current_user)):
+    if req.provider not in conn_helpers.PROVIDERS:
+        raise HTTPException(status_code=400, detail="Unknown provider.")
+    ok, message = conn_helpers.test_connection(req.provider, req.config)
+    return {"ok": ok, "message": message}
+
+
+@app.put("/api/connections")
+def save_connection(req: ConnectionRequest, user: dict = Depends(get_current_user)):
+    if req.provider not in conn_helpers.PROVIDERS:
+        raise HTTPException(status_code=400, detail="Unknown provider.")
+    ok, message = conn_helpers.test_connection(req.provider, req.config)
+    upsert_connection(user["org_id"], req.provider, req.config, connected=ok)
+    return {"connected": ok, "message": message}
+
+
+@app.delete("/api/connections/{provider}")
+def remove_connection(provider: str, user: dict = Depends(get_current_user)):
+    delete_connection(user["org_id"], provider)
+    return {"ok": True}
+
+
+@app.post("/api/onboarding/complete")
+def complete_onboarding(user: dict = Depends(get_current_user)):
+    set_org_onboarded(user["org_id"], True)
+    return {"onboarded": True}
 
 
 # ── Feedback ──────────────────────────────────────────────────────────────────
@@ -152,29 +212,76 @@ def ask_axis(req: AskRequest, user: Optional[dict] = Depends(get_optional_user))
             chat_history=req.history or None,
             team_filter=req.team_filter,
         )
-        # `user` is None for anonymous callers; the personalized-history feature
-        # will use this to persist the exchange to the logged-in user's account.
+        clean_sources = [
+            {
+                "team": s["team"],
+                "title": s["title"],
+                "relevance": s["relevance"],
+                "url": s.get("url", ""),
+                "source": s.get("source", ""),
+            }
+            for s in sources
+        ]
+
+        # Persist the exchange for logged-in users (anonymous callers aren't saved).
+        conversation_id, title = req.conversation_id, None
+        if user:
+            if not conversation_id:
+                title = req.question.strip()[:48] or "New chat"
+                conversation_id = create_conversation(user["id"], title)
+            add_message(conversation_id, user["id"], "user", req.question)
+            add_message(conversation_id, user["id"], "axis", answer, clean_sources)
+
         return {
             "answer": answer,
-            "sources": [
-                {
-                    "team": s["team"],
-                    "title": s["title"],
-                    "relevance": s["relevance"],
-                    "url": s.get("url", ""),
-                    "source": s.get("source", ""),
-                }
-                for s in sources
-            ],
+            "sources": clean_sources,
+            "conversation_id": conversation_id,
+            "title": title,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Conversations ─────────────────────────────────────────────────────────────
+
+@app.get("/api/conversations")
+def get_conversations(user: dict = Depends(get_current_user)):
+    return {"conversations": list_conversations(user["id"])}
+
+
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: int, user: dict = Depends(get_current_user)):
+    msgs = get_conversation_messages(user["id"], conversation_id)
+    if msgs is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"messages": msgs}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def remove_conversation(conversation_id: int, user: dict = Depends(get_current_user)):
+    delete_conversation(user["id"], conversation_id)
+    return {"ok": True}
+
+
+def _apply_org_connections(org_id, target):
+    """Load the org's stored connection configs and set the env vars sync reads."""
+    if not org_id:
+        return
+    providers = conn_helpers.PROVIDERS if target == "both" else [target]
+    for provider in providers:
+        cfg = get_connection_config(org_id, provider)
+        if cfg:
+            conn_helpers.apply_env(provider, cfg)
+
+
 @app.post("/api/sync")
-def do_sync(req: SyncRequest):
+def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user)):
     log = []
     try:
+        # If the caller is logged in, drive sync from their org's stored connections;
+        # otherwise fall back to whatever is configured in the environment (.env).
+        if user:
+            _apply_org_connections(user.get("org_id"), req.target)
         if req.target == "jira":
             res = sync_jira(progress_cb=log.append)
             return {"jira": res["synced"], "confluence": None, "slack": None, "log": log}

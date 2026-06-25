@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 const TEAMS = [
   { id: null, label: 'All Teams', color: 'var(--c-all)' },
@@ -20,7 +20,8 @@ const SYNC_SOURCES = [
   ['gdrive', 'Drive'],
 ]
 
-export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, onSyncDone, onClearChat, addToast }) {
+export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, onSyncDone, onClearChat, addToast, token,
+  conversations = [], currentConvId, onNewChat, onSelectConversation, onDeleteConversation }) {
   const [stats, setStats] = useState({ total: 0, teams: 0, byTeam: {} })
   const [syncLoading, setSyncLoading] = useState({})
   const [syncResults, setSyncResults] = useState({})
@@ -31,6 +32,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
   const [formLoading, setFormLoading] = useState(false)
   const [schedulerStatus, setSchedulerStatus] = useState(null)
   const [countdown, setCountdown] = useState(null)
+  const [connections, setConnections] = useState([])
 
   useEffect(() => {
     fetch('/api/stats')
@@ -38,6 +40,34 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
       .then(d => setStats(d))
       .catch(() => {})
   }, [])
+
+  // Which sources this org connected during onboarding
+  const loadConnections = useCallback(() => {
+    if (!token) return
+    fetch('/api/connections', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setConnections(d.connections || []))
+      .catch(() => {})
+  }, [token])
+
+  useEffect(() => { loadConnections() }, [loadConnections])
+
+  // Show only the sources this org connected; if none, fall back to all.
+  const connectedKeys = connections.filter(c => c.connected).map(c => c.provider)
+  const displaySources = connectedKeys.length
+    ? SYNC_SOURCES.filter(([k]) => connectedKeys.includes(k))
+    : SYNC_SOURCES
+
+  // Build the Workspace (team) filter from the connected sources' teams.
+  const TEAM_BY_LABEL = Object.fromEntries(TEAMS.filter(t => t.id).map(t => [t.label, t]))
+  const connectedTeamLabels = [...new Set(
+    connections.filter(c => c.connected).flatMap(c => c.teams || [])
+  )]
+  const workspaceTeams = connectedTeamLabels.length
+    ? [TEAMS[0], ...connectedTeamLabels.map(l =>
+        TEAM_BY_LABEL[l] || { id: l.toLowerCase().replace(/\s+/g, '_'), label: l, color: 'var(--c-all)' }
+      )]
+    : TEAMS
 
   // Fetch scheduler status on mount + every 60s
   useEffect(() => {
@@ -64,7 +94,10 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ target }),
       })
       const data = await res.json()
@@ -175,10 +208,63 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
       </div>
 
       <div style={{ padding: '0 0 12px', flex: 1 }}>
+        {/* Chats */}
+        <div style={sectionLabel}>Chats</div>
+        <div style={{ padding: '0 8px' }}>
+          <button
+            onClick={onNewChat}
+            style={{
+              width: '100%', height: 34, borderRadius: 8, border: '1px solid var(--border)',
+              background: 'var(--surface2)', color: 'var(--text1)', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'Inter, sans-serif', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border2)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+          >
+            + New chat
+          </button>
+          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 220, overflowY: 'auto' }}>
+            {conversations.length === 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', padding: '6px 10px' }}>No chats yet</div>
+            )}
+            {conversations.map(c => {
+              const active = c.id === currentConvId
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => onSelectConversation(c.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 8px 7px 10px',
+                    borderRadius: 8, cursor: 'pointer', marginBottom: 1,
+                    background: active ? 'var(--accent-dim)' : 'transparent',
+                    border: active ? '1px solid var(--accent)' : '1px solid transparent',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface2)' }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ flex: 1, fontSize: 12.5, color: active ? 'var(--text1)' : 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.title}>
+                    {c.title}
+                  </span>
+                  <button
+                    onClick={e => { e.stopPropagation(); onDeleteConversation(c.id) }}
+                    title="Delete chat"
+                    style={{ border: 'none', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#F87171' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text3)' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Workspace */}
         <div style={sectionLabel}>Workspace</div>
         <div style={{ padding: '0 8px' }}>
-          {TEAMS.map(team => {
+          {workspaceTeams.map(team => {
             const active = teamFilter === team.id
             return (
               <button
@@ -229,7 +315,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         <div style={sectionLabel}>Data Sync</div>
         <div style={{ padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {SYNC_SOURCES.map(([target, label]) => (
+            {displaySources.map(([target, label]) => (
               <button
                 key={target}
                 onClick={() => handleSync(target)}
