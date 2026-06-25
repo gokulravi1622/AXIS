@@ -37,16 +37,29 @@ SLACK_DEFAULT_TEAM = os.environ.get("SLACK_DEFAULT_TEAM", "Engineering")
 SLACK_SCOPES = "channels:history,channels:read,groups:history,groups:read,users:read"
 
 
+# ── Atlassian (Jira + Confluence) ─────────────────────────────────────────────
+ATLASSIAN_CLIENT_ID = os.environ.get("ATLASSIAN_OAUTH_CLIENT_ID")
+ATLASSIAN_CLIENT_SECRET = os.environ.get("ATLASSIAN_OAUTH_CLIENT_SECRET")
+ATLASSIAN_REDIRECT_URI = os.environ.get(
+    "ATLASSIAN_REDIRECT_URI", "http://localhost:8000/api/connect/atlassian/callback"
+)
+ATLASSIAN_DEFAULT_TEAM = os.environ.get("ATLASSIAN_DEFAULT_TEAM", "Engineering")
+ATLASSIAN_SCOPES = ("read:jira-work read:jira-user read:confluence-content.all "
+                    "read:confluence-space.summary offline_access")
+
+
 def configured(provider: str) -> bool:
     if provider == "notion":
         return bool(NOTION_CLIENT_ID and NOTION_CLIENT_SECRET)
     if provider == "slack":
         return bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
+    if provider == "atlassian":
+        return bool(ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET)
     return False
 
 
 def oauth_providers() -> list[str]:
-    return [p for p in ("notion", "slack") if configured(p)]
+    return [p for p in ("notion", "slack", "atlassian") if configured(p)]
 
 
 # ── Generic dispatch (used by the /api/connect/{provider}/* endpoints) ─────────
@@ -55,6 +68,8 @@ def authorize_url(provider: str, state: str) -> str:
         return notion_authorize_url(state)
     if provider == "slack":
         return slack_authorize_url(state)
+    if provider == "atlassian":
+        return atlassian_authorize_url(state)
     raise ValueError(f"No OAuth for provider: {provider}")
 
 
@@ -63,6 +78,8 @@ def exchange(provider: str, code: str) -> dict:
         return notion_exchange(code)
     if provider == "slack":
         return slack_exchange(code)
+    if provider == "atlassian":
+        return atlassian_exchange(code)
     raise ValueError(f"No OAuth for provider: {provider}")
 
 
@@ -132,3 +149,47 @@ def slack_exchange(code: str) -> dict:
     if not data.get("ok"):
         raise RuntimeError(f"Slack OAuth error: {data.get('error')}")
     return {"bot_token": data["access_token"], "team": SLACK_DEFAULT_TEAM, "channels": ""}
+
+
+# ── Atlassian authorize + exchange ────────────────────────────────────────────
+def atlassian_authorize_url(state: str) -> str:
+    q = urlencode({
+        "audience": "api.atlassian.com",
+        "client_id": ATLASSIAN_CLIENT_ID,
+        "scope": ATLASSIAN_SCOPES,
+        "redirect_uri": ATLASSIAN_REDIRECT_URI,
+        "state": state,
+        "response_type": "code",
+        "prompt": "consent",
+    })
+    return f"https://auth.atlassian.com/authorize?{q}"
+
+
+def atlassian_exchange(code: str) -> dict:
+    """Exchange code → tokens, then resolve the site's cloudId. Stores the refresh
+    token (a fresh access token is minted from it on each sync)."""
+    r = requests.post(
+        "https://auth.atlassian.com/oauth/token",
+        json={"grant_type": "authorization_code", "client_id": ATLASSIAN_CLIENT_ID,
+              "client_secret": ATLASSIAN_CLIENT_SECRET, "code": code,
+              "redirect_uri": ATLASSIAN_REDIRECT_URI},
+        timeout=15,
+    )
+    r.raise_for_status()
+    tok = r.json()
+    res = requests.get(
+        "https://api.atlassian.com/oauth/token/accessible-resources",
+        headers={"Authorization": f"Bearer {tok['access_token']}", "Accept": "application/json"},
+        timeout=15,
+    )
+    res.raise_for_status()
+    sites = res.json()
+    if not sites:
+        raise RuntimeError("No Atlassian sites accessible for this account.")
+    site = sites[0]
+    return {
+        "refresh_token": tok["refresh_token"],
+        "cloud_id": site["id"],
+        "site_url": site.get("url", ""),
+        "team": ATLASSIAN_DEFAULT_TEAM,
+    }

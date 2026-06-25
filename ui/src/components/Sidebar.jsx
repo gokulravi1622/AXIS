@@ -18,6 +18,7 @@ const SYNC_SOURCES = [
   ['slack', 'Slack'],
   ['notion', 'Notion'],
   ['gdrive', 'Drive'],
+  ['atlassian', 'Atlassian'],
 ]
 
 export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, onSyncDone, onClearChat, addToast, token,

@@ -744,11 +744,125 @@ def sync_gdrive(progress_cb=None) -> dict:
     return {"synced": len(ids)}
 
 
+# ── Atlassian (Jira + Confluence) via OAuth ───────────────────────────────────
+#
+# One OAuth connection grants both. Access tokens are short-lived, so we mint a
+# fresh one from the stored refresh token on each sync (persisting the rotated
+# refresh token back to the org's connection). API calls use Bearer auth against
+# api.atlassian.com/ex/{jira,confluence}/{cloudId}.
+
+def _atlassian_access_token() -> tuple[str, str]:
+    refresh = os.environ.get("ATLASSIAN_REFRESH_TOKEN")
+    cloud_id = os.environ.get("ATLASSIAN_CLOUD_ID")
+    if not (refresh and cloud_id):
+        raise RuntimeError("Atlassian not connected.")
+    resp = requests.post(
+        "https://auth.atlassian.com/oauth/token",
+        json={"grant_type": "refresh_token",
+              "client_id": os.environ.get("ATLASSIAN_OAUTH_CLIENT_ID"),
+              "client_secret": os.environ.get("ATLASSIAN_OAUTH_CLIENT_SECRET"),
+              "refresh_token": refresh},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    new_refresh = data.get("refresh_token", refresh)
+    # Persist a rotated refresh token so the next sync still works.
+    org_id = os.environ.get("ATLASSIAN_ORG_ID")
+    if org_id and new_refresh and new_refresh != refresh:
+        try:
+            from db import upsert_connection, get_connection_config
+            cfg = get_connection_config(int(org_id), "atlassian") or {}
+            cfg["refresh_token"] = new_refresh
+            upsert_connection(int(org_id), "atlassian", cfg, connected=True)
+            os.environ["ATLASSIAN_REFRESH_TOKEN"] = new_refresh
+        except Exception:
+            pass
+    return data["access_token"], cloud_id
+
+
+def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
+    resp = requests.get(f"{base}{path}",
+                        headers={"Authorization": f"Bearer {access}", "Accept": "application/json"},
+                        params=params, timeout=20)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def sync_atlassian(progress_cb=None) -> dict:
+    """Sync Jira issues + Confluence pages via an Atlassian OAuth connection."""
+    access, cloud_id = _atlassian_access_token()
+    jira_base = f"https://api.atlassian.com/ex/jira/{cloud_id}"
+    conf_base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
+    collection = _get_collection()
+    total = 0
+
+    # Jira — all accessible issues, newest first
+    if progress_cb:
+        progress_cb("Fetching Jira issues (Atlassian OAuth)…")
+    ids, documents, metadatas = [], [], []
+    start = 0
+    while True:
+        data = _atlassian_get(jira_base, "/rest/api/3/search/jql", access, {
+            "jql": "ORDER BY updated DESC", "startAt": start, "maxResults": 50,
+            "fields": "summary,description,status,assignee,priority,labels,comment,updated,project",
+        })
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        for issue in issues:
+            proj = (issue.get("fields", {}).get("project") or {}).get("key", "")
+            doc = _ticket_to_doc(issue, proj)
+            chunk = f"Team: {doc['team']}\nTitle: {doc['title']}\n\n{doc['content']}"
+            ids.append(doc["id"]); documents.append(chunk)
+            metadatas.append({"team": doc["team"], "title": doc["title"],
+                              "tags": ", ".join(doc["tags"]), "source": "jira", "url": doc["url"]})
+        start += len(issues)
+        if start >= data.get("total", 0):
+            break
+    if ids:
+        _upsert_batch(collection, ids, documents, metadatas)
+        total += len(ids)
+        if progress_cb:
+            progress_cb(f"  ✓ {len(ids)} Jira issue(s) synced")
+
+    # Confluence — current pages
+    if progress_cb:
+        progress_cb("Fetching Confluence pages (Atlassian OAuth)…")
+    ids, documents, metadatas = [], [], []
+    start = 0
+    while True:
+        data = _atlassian_get(conf_base, "/wiki/rest/api/content", access, {
+            "type": "page", "status": "current", "start": start, "limit": 50,
+            "expand": "body.storage,version,space",
+        })
+        pages = data.get("results", [])
+        if not pages:
+            break
+        for page in pages:
+            space_key = (page.get("space") or {}).get("key", "")
+            doc = _page_to_doc(page, space_key)
+            chunk = f"Team: {doc['team']}\nTitle: {doc['title']}\n\n{doc['content']}"
+            ids.append(doc["id"]); documents.append(chunk)
+            metadatas.append({"team": doc["team"], "title": doc["title"],
+                              "tags": ", ".join(doc["tags"]), "source": "confluence", "url": doc["url"]})
+        start += len(pages)
+        if start >= data.get("size", 0) and len(pages) < 50:
+            break
+    if ids:
+        _upsert_batch(collection, ids, documents, metadatas)
+        total += len(ids)
+        if progress_cb:
+            progress_cb(f"  ✓ {len(ids)} Confluence page(s) synced")
+
+    return {"synced": total}
+
+
 # ── Full sync ─────────────────────────────────────────────────────────────────
 
 def sync_all(progress_cb=None) -> dict:
     results = {"jira": None, "confluence": None, "slack": None,
-               "notion": None, "gdrive": None, "errors": []}
+               "notion": None, "gdrive": None, "atlassian": None, "errors": []}
 
     steps = [
         ("jira", "Jira", sync_jira),
@@ -756,6 +870,7 @@ def sync_all(progress_cb=None) -> dict:
         ("slack", "Slack", sync_slack),
         ("notion", "Notion", sync_notion),
         ("gdrive", "Google Drive", sync_gdrive),
+        ("atlassian", "Atlassian", sync_atlassian),
     ]
     for key, label, fn in steps:
         try:

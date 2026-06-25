@@ -20,6 +20,7 @@ PROVIDER_FIELDS = {
     "slack":      ["bot_token", "channels"],
     "notion":     ["token", "team"],
     "gdrive":     ["service_account_json", "team", "folder_id"],
+    "atlassian":  [],  # OAuth-only (Jira + Confluence)
 }
 PROVIDERS = list(PROVIDER_FIELDS.keys())
 
@@ -58,6 +59,13 @@ def apply_env(provider: str, config: dict) -> None:
         )
         os.environ["GDRIVE_TEAM"] = config.get("team", "Data")
         os.environ["GDRIVE_FOLDER_ID"] = config.get("folder_id", "")
+    elif provider == "atlassian":
+        os.environ["ATLASSIAN_REFRESH_TOKEN"] = config.get("refresh_token", "")
+        os.environ["ATLASSIAN_CLOUD_ID"] = config.get("cloud_id", "")
+        os.environ["ATLASSIAN_TEAM"] = config.get("team", "Engineering")
+        # browse/wiki citation URLs are built from the site URL
+        if config.get("site_url"):
+            os.environ["JIRA_BASE_URL"] = config["site_url"]
 
 
 def connection_teams(provider: str, config: dict) -> list[str]:
@@ -72,6 +80,8 @@ def connection_teams(provider: str, config: dict) -> list[str]:
     if provider == "slack":
         teams = [e.split("=", 1)[1].strip() for e in _split(config.get("channels", "")) if "=" in e]
         return list(dict.fromkeys(teams)) or [config.get("team", "Engineering")]
+    if provider == "atlassian":
+        return [config.get("team", "Engineering")]
     if provider in ("jira", "confluence"):
         from sync import PROJECT_TO_TEAM, SPACE_TO_TEAM
         mapping = PROJECT_TO_TEAM if provider == "jira" else SPACE_TO_TEAM

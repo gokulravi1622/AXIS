@@ -14,7 +14,7 @@ from typing import Optional
 
 from query import ask
 from contribute import submit_context, get_doc_count
-from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
+from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_atlassian, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -409,6 +409,9 @@ def _apply_org_connections(org_id, target):
         cfg = get_connection_config(org_id, provider)
         if cfg:
             conn_helpers.apply_env(provider, cfg)
+            if provider == "atlassian":
+                # so the token-refresh can persist a rotated refresh token
+                os.environ["ATLASSIAN_ORG_ID"] = str(org_id)
 
 
 @app.post("/api/sync")
@@ -434,6 +437,9 @@ def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user))
         elif req.target == "gdrive":
             res = sync_gdrive(progress_cb=log.append)
             return {"gdrive": res["synced"], "log": log}
+        elif req.target == "atlassian":
+            res = sync_atlassian(progress_cb=log.append)
+            return {"atlassian": res["synced"], "log": log}
         else:
             res = sync_all(progress_cb=log.append)
             return {
@@ -442,6 +448,7 @@ def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user))
                 "slack": res["slack"]["synced"] if res["slack"] else None,
                 "notion": res["notion"]["synced"] if res["notion"] else None,
                 "gdrive": res["gdrive"]["synced"] if res["gdrive"] else None,
+                "atlassian": res["atlassian"]["synced"] if res["atlassian"] else None,
                 "errors": res.get("errors", []),
                 "log": log,
             }

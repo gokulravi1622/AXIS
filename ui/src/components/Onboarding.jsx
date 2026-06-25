@@ -38,6 +38,11 @@ const PROVIDERS = {
       { key: 'team', label: 'File under team', placeholder: 'Product' },
     ],
   },
+  atlassian: {
+    label: 'Atlassian (Jira & Confluence)', color: '#2684FF',
+    help: 'One click connects both Jira and Confluence — projects and spaces are discovered automatically.',
+    fields: [],
+  },
   gdrive: {
     label: 'Google Drive', color: 'var(--c-crm)',
     help: 'Create a GCP service account, enable the Drive API, download its JSON key, and share your Docs/folder with the service-account email.',
@@ -49,7 +54,7 @@ const PROVIDERS = {
   },
 }
 
-const ORDER = ['jira', 'confluence', 'slack', 'notion', 'gdrive']
+const ORDER = ['atlassian', 'jira', 'confluence', 'slack', 'notion', 'gdrive']
 
 export default function Onboarding({ token, orgName, onComplete }) {
   const [step, setStep] = useState('select')          // 'select' | 'connect'
@@ -84,6 +89,9 @@ export default function Onboarding({ token, orgName, onComplete }) {
   const startOAuth = (p) => {
     window.location.href = `/api/connect/${p}/start?token=${encodeURIComponent(token)}`
   }
+
+  // Hide pure-OAuth providers (no manual fields) until the server says they're configured.
+  const visibleProviders = ORDER.filter(p => oauthProviders.includes(p) || PROVIDERS[p].fields.length > 0)
 
   const toggle = (p) =>
     setSelected(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
@@ -136,7 +144,7 @@ export default function Onboarding({ token, orgName, onComplete }) {
         {step === 'select' && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {ORDER.map(p => {
+              {visibleProviders.map(p => {
                 const on = selected.includes(p)
                 const meta = PROVIDERS[p]
                 return (
