@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-SPACE.hf.space/api/:path*"
+      "destination": "https://gokul1622-axis-backend.hf.space/api/:path*"
     }
   ]
 }
