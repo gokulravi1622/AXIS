@@ -13,14 +13,23 @@ from query import ask
 from contribute import submit_context, get_doc_count
 from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from db import (
     init_db, create_organization, get_organization, set_org_onboarded,
     list_connections, get_connection_config, upsert_connection, delete_connection,
     create_conversation, list_conversations, add_message,
-    get_conversation_messages, delete_conversation,
+    get_conversation_messages, delete_conversation, conversation_belongs_to,
+    upsert_pending_signup, get_pending_signup, bump_pending_attempts,
+    delete_pending_signup, email_exists,
 )
-from auth import create_user, authenticate, create_token, get_current_user, get_optional_user
+from auth import (
+    create_user, authenticate, create_token, get_current_user, get_optional_user,
+    hash_password, create_user_prehashed,
+)
 import connections as conn_helpers
+import mailer
 
 app = FastAPI(title="AXIS API")
 
@@ -63,7 +72,17 @@ class RegisterRequest(BaseModel):
     email: str
     name: str
     password: str
+    password_confirm: Optional[str] = None
     org_name: Optional[str] = ""
+
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    code: str
+
+
+class ResendOtpRequest(BaseModel):
+    email: str
 
 
 class LoginRequest(BaseModel):
@@ -103,17 +122,69 @@ def _auth_response(user: dict) -> dict:
     return {"token": token, "user": user, "org": _org_payload(user.get("org_id"))}
 
 
+OTP_TTL_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
+
+
+def _start_verification(email, name, org_name, password_hash):
+    """Generate + store an OTP and email it. Returns dev_code (only when not emailed)."""
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=OTP_TTL_MINUTES)).isoformat()
+    upsert_pending_signup(email, name, org_name, password_hash, code, expires)
+    sent = mailer.send_otp_email(email, code)
+    return None if sent else code  # dev mode: surface the code so the flow is testable
+
+
 @app.post("/api/auth/register")
 def register(req: RegisterRequest):
-    if not req.email.strip() or "@" not in req.email:
+    email = req.email.strip().lower()
+    if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="A valid email is required.")
-    if len(req.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
     if not req.name.strip():
         raise HTTPException(status_code=400, detail="Name is required.")
-    org_id = create_organization(req.org_name or f"{req.name.strip()}'s workspace")
-    user = create_user(req.email, req.name, req.password, org_id)
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    if req.password_confirm is not None and req.password != req.password_confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    if email_exists(email):
+        raise HTTPException(status_code=409, detail="An account with that email already exists.")
+
+    org_name = req.org_name or f"{req.name.strip()}'s workspace"
+    dev_code = _start_verification(email, req.name, org_name, hash_password(req.password))
+    return {"pending": True, "email": email, "dev_code": dev_code}
+
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(req: VerifyOtpRequest):
+    email = req.email.strip().lower()
+    pending = get_pending_signup(email)
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending verification for this email. Please sign up again.")
+    if pending["expires_at"] < datetime.now(timezone.utc).isoformat():
+        delete_pending_signup(email)
+        raise HTTPException(status_code=400, detail="Code expired. Please request a new one.")
+    if pending["attempts"] >= OTP_MAX_ATTEMPTS:
+        delete_pending_signup(email)
+        raise HTTPException(status_code=429, detail="Too many attempts. Please sign up again.")
+    if req.code.strip() != pending["code"]:
+        bump_pending_attempts(email)
+        raise HTTPException(status_code=400, detail="Incorrect code. Please try again.")
+
+    # Verified — create the org + user now.
+    org_id = create_organization(pending["org_name"] or f"{pending['name']}'s workspace")
+    user = create_user_prehashed(email, pending["name"], pending["password_hash"], org_id)
+    delete_pending_signup(email)
     return _auth_response(user)
+
+
+@app.post("/api/auth/resend-otp")
+def resend_otp(req: ResendOtpRequest):
+    email = req.email.strip().lower()
+    pending = get_pending_signup(email)
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending verification for this email.")
+    dev_code = _start_verification(email, pending["name"], pending["org_name"], pending["password_hash"])
+    return {"pending": True, "email": email, "dev_code": dev_code}
 
 
 @app.post("/api/auth/login")
@@ -226,6 +297,9 @@ def ask_axis(req: AskRequest, user: Optional[dict] = Depends(get_optional_user))
         # Persist the exchange for logged-in users (anonymous callers aren't saved).
         conversation_id, title = req.conversation_id, None
         if user:
+            # Never write into a conversation the caller doesn't own — start fresh instead.
+            if conversation_id and not conversation_belongs_to(user["id"], conversation_id):
+                conversation_id = None
             if not conversation_id:
                 title = req.question.strip()[:48] or "New chat"
                 conversation_id = create_conversation(user["id"], title)

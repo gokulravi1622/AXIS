@@ -82,6 +82,23 @@ def create_user(email: str, name: str, password: str, org_id: int) -> dict:
         conn.close()
 
 
+def create_user_prehashed(email: str, name: str, password_hash: str, org_id: int) -> dict:
+    """Insert a user whose password is already hashed (used after OTP verification)."""
+    email = email.strip().lower()
+    conn = get_conn()
+    try:
+        cur = conn.execute(
+            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?)",
+            (email, name.strip(), password_hash, now_iso(), org_id),
+        )
+        conn.commit()
+        return {"id": cur.lastrowid, "email": email, "name": name.strip(), "org_id": org_id}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="An account with that email already exists.")
+    finally:
+        conn.close()
+
+
 def authenticate(email: str, password: str) -> dict:
     email = email.strip().lower()
     conn = get_conn()

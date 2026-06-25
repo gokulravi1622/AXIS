@@ -125,16 +125,26 @@ def refresh_doc_scores():
 
 
 # ── Retrieve ──────────────────────────────────────────────────────────────────
+def _norm_team(s: str) -> str:
+    """Normalize a team name so 'product', 'Product', 'Client Success' all align."""
+    return (s or "").strip().lower().replace(" ", "_")
+
+
 def retrieve(query: str, team_filter: Optional[str] = None) -> list[dict]:
-    """Retrieve top-K relevant chunks, optionally filtered by team."""
+    """Retrieve top-K relevant chunks, optionally filtered by team.
+
+    Team filtering is done in Python with normalization because the UI sends a
+    lowercased id (e.g. 'product') while ChromaDB stores the display name
+    ('Product') — a `where` exact-match would never hit.
+    """
     collection = get_collection()
 
-    where = {"team": team_filter} if team_filter else None
+    # Over-fetch when filtering so enough of the target team survives the filter.
+    n_results = TOP_K if not team_filter else max(TOP_K * 6, 48)
 
     results = collection.query(
         query_texts=[query],
-        n_results=TOP_K,
-        where=where,
+        n_results=n_results,
         include=["documents", "metadatas", "distances"],
     )
 
@@ -153,6 +163,10 @@ def retrieve(query: str, team_filter: Optional[str] = None) -> list[dict]:
             "source": meta.get("source", ""),
             "relevance": round((1 - dist) * 100, 1),  # cosine → % relevance
         })
+
+    if team_filter:
+        tf = _norm_team(team_filter)
+        chunks = [c for c in chunks if _norm_team(c["team"]) == tf][:TOP_K]
 
     return chunks
 

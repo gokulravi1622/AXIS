@@ -63,10 +63,15 @@ class BM25Index:
         tokenized_query = self._tokenize(query)
         scores = self._bm25.get_scores(tokenized_query)
 
-        # Pair scores with docs, apply optional team filter
+        # Pair scores with docs, apply optional team filter (normalized: the UI
+        # sends 'product' while docs store 'Product').
+        def _norm(s):
+            return (s or "").strip().lower().replace(" ", "_")
+
         scored = []
+        tf = _norm(team_filter) if team_filter else None
         for score, doc in zip(scores, self._docs):
-            if team_filter and doc.get("team") != team_filter:
+            if tf and _norm(doc.get("team")) != tf:
                 continue
             scored.append((score, doc))
 

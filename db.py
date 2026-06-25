@@ -103,6 +103,17 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id, updated_at);
+
+            CREATE TABLE IF NOT EXISTS pending_signups (
+                email         TEXT PRIMARY KEY,
+                name          TEXT NOT NULL,
+                org_name      TEXT,
+                password_hash TEXT NOT NULL,
+                code          TEXT NOT NULL,
+                expires_at    TEXT NOT NULL,
+                attempts      INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT NOT NULL
+            );
             """
         )
         # Migration: add org_id to users if the table predates organizations.
@@ -244,6 +255,63 @@ def delete_connection(org_id: int, provider: str) -> None:
         conn.close()
 
 
+# ── Pending signups (email OTP verification) ──────────────────────────────────
+
+def upsert_pending_signup(email: str, name: str, org_name: str,
+                          password_hash: str, code: str, expires_at: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO pending_signups (email, name, org_name, password_hash, code, expires_at, attempts, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                name = excluded.name, org_name = excluded.org_name,
+                password_hash = excluded.password_hash, code = excluded.code,
+                expires_at = excluded.expires_at, attempts = 0, created_at = excluded.created_at
+            """,
+            (email, name, org_name, password_hash, code, expires_at, now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_pending_signup(email: str) -> dict | None:
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT * FROM pending_signups WHERE email = ?", (email,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def bump_pending_attempts(email: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE pending_signups SET attempts = attempts + 1 WHERE email = ?", (email,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_pending_signup(email: str) -> None:
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM pending_signups WHERE email = ?", (email,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def email_exists(email: str) -> bool:
+    conn = get_conn()
+    try:
+        return conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone() is not None
+    finally:
+        conn.close()
+
+
 # ── Conversations (multi-chat history) ────────────────────────────────────────
 
 def create_conversation(user_id: int, title: str) -> int:
@@ -306,6 +374,17 @@ def get_conversation_messages(user_id: int, conversation_id: int) -> list[dict] 
         conn.close()
     return [{"role": r["role"], "content": r["content"],
              "sources": json.loads(r["sources"]) if r["sources"] else []} for r in rows]
+
+
+def conversation_belongs_to(user_id: int, conversation_id: int) -> bool:
+    conn = get_conn()
+    try:
+        return conn.execute(
+            "SELECT 1 FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, user_id),
+        ).fetchone() is not None
+    finally:
+        conn.close()
 
 
 def delete_conversation(user_id: int, conversation_id: int) -> None:
