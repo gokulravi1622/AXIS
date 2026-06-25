@@ -475,13 +475,40 @@ def _thread_text(channel_id: str, root: dict) -> str:
     return "\n".join(lines)
 
 
+def _slack_member_channels() -> list[str]:
+    """IDs of channels the bot is a member of (used for OAuth auto-discovery)."""
+    ids, cursor = [], ""
+    while True:
+        data = _slack_call("conversations.list", {
+            "types": "public_channel,private_channel", "limit": 200,
+            "exclude_archived": "true", "cursor": cursor,
+        })
+        for ch in data.get("channels", []):
+            if ch.get("is_member"):
+                ids.append(ch["id"])
+        cursor = data.get("response_metadata", {}).get("next_cursor", "")
+        if not cursor:
+            return ids
+
+
 def sync_slack(progress_cb=None) -> dict:
-    """Sync configured Slack channels' messages/threads into ChromaDB."""
+    """Sync Slack channels' messages/threads into ChromaDB.
+
+    Channels can be listed explicitly via SLACK_CHANNELS ("name=Team,…"). If none
+    are listed (the OAuth flow), auto-discover every channel the bot is in and file
+    them under SLACK_AUTO_TEAM.
+    """
+    _slack_token()  # fail fast if no token
     channels = _parse_slack_channels()
     if not channels:
-        raise RuntimeError('SLACK_CHANNELS not set. e.g. "eng-help=Engineering,data=Data"')
+        team = os.environ.get("SLACK_AUTO_TEAM", "Engineering")
+        member_ids = _slack_member_channels()
+        if not member_ids:
+            if progress_cb:
+                progress_cb("Slack: the bot isn't in any channel yet — invite it to channels to sync.")
+            return {"synced": 0, "channels": []}
+        channels = [(cid, team) for cid in member_ids]
 
-    _slack_token()  # fail fast if no token
     collection = _get_collection()
     total = 0
 

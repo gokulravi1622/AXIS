@@ -188,7 +188,9 @@ export default function Onboarding({ token, orgName, onComplete }) {
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
                       {oauthProviders.includes(p)
-                        ? `Click connect and authorize ${meta.label} — no tokens to copy.`
+                        ? (p === 'slack'
+                            ? 'Click connect and authorize Slack, then invite the bot to the channels you want synced.'
+                            : `Click connect and authorize ${meta.label} — no tokens to copy.`)
                         : meta.help}
                     </div>
 

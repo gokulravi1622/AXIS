@@ -242,31 +242,31 @@ def get_connections(user: dict = Depends(get_current_user)):
 
 # ── OAuth "Connect" flows ─────────────────────────────────────────────────────
 
-@app.get("/api/connect/notion/start")
-def notion_oauth_start(token: str):
+@app.get("/api/connect/{provider}/start")
+def oauth_start(provider: str, token: str):
     # Browser navigation (no auth header) → identity comes via the ?token query param.
     payload = decode_token(token)
     user = get_user_by_id(int(payload["sub"])) if payload else None
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated.")
-    if not oauth.configured("notion"):
-        raise HTTPException(status_code=400, detail="Notion OAuth is not configured on the server.")
+    if not oauth.configured(provider):
+        raise HTTPException(status_code=400, detail=f"{provider} OAuth is not configured on the server.")
     state = oauth.make_state(user["id"], user["org_id"])
-    return RedirectResponse(oauth.notion_authorize_url(state))
+    return RedirectResponse(oauth.authorize_url(provider, state))
 
 
-@app.get("/api/connect/notion/callback")
-def notion_oauth_callback(code: Optional[str] = None, state: Optional[str] = None,
-                          error: Optional[str] = None):
+@app.get("/api/connect/{provider}/callback")
+def oauth_callback(provider: str, code: Optional[str] = None, state: Optional[str] = None,
+                   error: Optional[str] = None):
     st = oauth.read_state(state) if state else None
     if error or not code or not st:
-        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error=notion")
+        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={provider}")
     try:
-        config = oauth.notion_exchange(code)
-        upsert_connection(st["org"], "notion", config, connected=True)
+        config = oauth.exchange(provider, code)
+        upsert_connection(st["org"], provider, config, connected=True)
     except Exception:
-        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error=notion")
-    return RedirectResponse(f"{oauth.FRONTEND_URL}/?connected=notion")
+        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={provider}")
+    return RedirectResponse(f"{oauth.FRONTEND_URL}/?connected={provider}")
 
 
 @app.post("/api/connections/test")

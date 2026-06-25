@@ -46,6 +46,9 @@ def apply_env(provider: str, config: dict) -> None:
     elif provider == "slack":
         os.environ["SLACK_BOT_TOKEN"] = config.get("bot_token", "")
         os.environ["SLACK_CHANNELS"] = config.get("channels", "")
+        # When channels aren't listed (OAuth flow), sync auto-discovers the bot's
+        # channels and files them under this team.
+        os.environ["SLACK_AUTO_TEAM"] = config.get("team", "Engineering")
     elif provider == "notion":
         os.environ["NOTION_TOKEN"] = config.get("token", "")
         os.environ["NOTION_TEAM"] = config.get("team", "Product")
@@ -68,7 +71,7 @@ def connection_teams(provider: str, config: dict) -> list[str]:
         return [config.get("team", "Data")]
     if provider == "slack":
         teams = [e.split("=", 1)[1].strip() for e in _split(config.get("channels", "")) if "=" in e]
-        return list(dict.fromkeys(teams))
+        return list(dict.fromkeys(teams)) or [config.get("team", "Engineering")]
     if provider in ("jira", "confluence"):
         from sync import PROJECT_TO_TEAM, SPACE_TO_TEAM
         mapping = PROJECT_TO_TEAM if provider == "jira" else SPACE_TO_TEAM

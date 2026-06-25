@@ -27,15 +27,43 @@ NOTION_REDIRECT_URI = os.environ.get(
 )
 NOTION_TEAM_DEFAULT = os.environ.get("NOTION_TEAM", "Product")
 
+# ── Slack ─────────────────────────────────────────────────────────────────────
+SLACK_CLIENT_ID = os.environ.get("SLACK_OAUTH_CLIENT_ID")
+SLACK_CLIENT_SECRET = os.environ.get("SLACK_OAUTH_CLIENT_SECRET")
+SLACK_REDIRECT_URI = os.environ.get(
+    "SLACK_REDIRECT_URI", "http://localhost:8000/api/connect/slack/callback"
+)
+SLACK_DEFAULT_TEAM = os.environ.get("SLACK_DEFAULT_TEAM", "Engineering")
+SLACK_SCOPES = "channels:history,channels:read,groups:history,groups:read,users:read"
+
 
 def configured(provider: str) -> bool:
     if provider == "notion":
         return bool(NOTION_CLIENT_ID and NOTION_CLIENT_SECRET)
+    if provider == "slack":
+        return bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
     return False
 
 
 def oauth_providers() -> list[str]:
-    return [p for p in ("notion",) if configured(p)]
+    return [p for p in ("notion", "slack") if configured(p)]
+
+
+# ── Generic dispatch (used by the /api/connect/{provider}/* endpoints) ─────────
+def authorize_url(provider: str, state: str) -> str:
+    if provider == "notion":
+        return notion_authorize_url(state)
+    if provider == "slack":
+        return slack_authorize_url(state)
+    raise ValueError(f"No OAuth for provider: {provider}")
+
+
+def exchange(provider: str, code: str) -> dict:
+    if provider == "notion":
+        return notion_exchange(code)
+    if provider == "slack":
+        return slack_exchange(code)
+    raise ValueError(f"No OAuth for provider: {provider}")
 
 
 # ── signed state (CSRF + carries user/org through the redirect) ────────────────
@@ -78,3 +106,29 @@ def notion_exchange(code: str) -> dict:
     r.raise_for_status()
     data = r.json()
     return {"token": data["access_token"], "team": NOTION_TEAM_DEFAULT}
+
+
+# ── Slack authorize + exchange ────────────────────────────────────────────────
+def slack_authorize_url(state: str) -> str:
+    q = urlencode({
+        "client_id": SLACK_CLIENT_ID,
+        "scope": SLACK_SCOPES,
+        "redirect_uri": SLACK_REDIRECT_URI,
+        "state": state,
+    })
+    return f"https://slack.com/oauth/v2/authorize?{q}"
+
+
+def slack_exchange(code: str) -> dict:
+    """Exchange the code for a bot token. Channels are auto-discovered at sync time."""
+    r = requests.post(
+        "https://slack.com/api/oauth.v2.access",
+        data={"client_id": SLACK_CLIENT_ID, "client_secret": SLACK_CLIENT_SECRET,
+              "code": code, "redirect_uri": SLACK_REDIRECT_URI},
+        timeout=15,
+    )
+    r.raise_for_status()
+    data = r.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"Slack OAuth error: {data.get('error')}")
+    return {"bot_token": data["access_token"], "team": SLACK_DEFAULT_TEAM, "channels": ""}
