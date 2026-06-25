@@ -1,0 +1,16 @@
+# Keep secrets, local data, and bulky/unneeded dirs OUT of the backend image.
+.env
+.env.*
+.axis_key
+axis.db
+axis.db-journal
+axis.db-wal
+axis_db/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+ui/node_modules/
+ui/dist/
+.cache/
+*.md

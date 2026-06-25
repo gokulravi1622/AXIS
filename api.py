@@ -2,7 +2,9 @@
 
 import os
 from dotenv import load_dotenv
-load_dotenv('/Users/gokulravi/Desktop/AXIS/.env')
+# Loads .env from the working dir if present (local dev). In cloud deploys there
+# is no .env — secrets come from the host's environment, so this is a safe no-op.
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +43,31 @@ app.add_middleware(
 )
 
 
+def _ensure_seeded():
+    """Re-ingest seed docs if the vector store is empty (e.g. fresh/ephemeral deploy)."""
+    try:
+        import chromadb
+        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+        client = chromadb.PersistentClient(path="axis_db")
+        col = client.get_collection(
+            "axis_context",
+            embedding_function=SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2"),
+        )
+        if col.count() > 0:
+            return  # already has data — don't wipe
+    except Exception:
+        pass
+    try:
+        import ingest
+        ingest.ingest()
+    except Exception as e:
+        print(f"Seed ingest skipped: {e}", flush=True)
+
+
 @app.on_event("startup")
 async def on_startup():
     init_db()
+    _ensure_seeded()
     start_scheduler()
 
 

@@ -24,11 +24,13 @@ RERANK_TOP_K = 3  # keep best 3 after re-ranking
 HISTORY_WINDOW = 6  # last 6 turns = 3 exchanges
 
 # ── Answer-generation backend ───────────────────────────────────────────────
-# "ollama" (default) runs a local model — free, no API key. "anthropic" calls
-# the Claude API (needs ANTHROPIC_API_KEY with credits).
+# "ollama"  — local model, free, no key (default for local dev)
+# "groq"    — free hosted Llama via Groq API (for cloud deploys; needs GROQ_API_KEY)
+# "anthropic" — Claude API (needs ANTHROPIC_API_KEY with credits)
 LLM_BACKEND = os.environ.get("AXIS_LLM_BACKEND", "ollama").lower()
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # Feedback loop: each net up/down vote nudges a doc's rank by FEEDBACK_WEIGHT,
 # capped at ±FEEDBACK_CAP votes so feedback refines but never overrides relevance.
@@ -257,10 +259,31 @@ def _generate_ollama(messages: list[dict]) -> str:
     return resp.json()["message"]["content"]
 
 
+def _generate_groq(messages: list[dict]) -> str:
+    """Call Groq's free OpenAI-compatible chat API (good fit for free cloud deploys)."""
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY not set.")
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+        "max_tokens": 1024,
+    }
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload, timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+
 def generate_answer(messages: list[dict]) -> str:
     """Dispatch to the configured backend."""
     if LLM_BACKEND == "anthropic":
         return _generate_anthropic(messages)
+    if LLM_BACKEND == "groq":
+        return _generate_groq(messages)
     return _generate_ollama(messages)
 
 
@@ -309,11 +332,11 @@ def ask(
         # or the Anthropic key is out of credits) still return the retrieved
         # sources so the UI — including the feedback buttons — keeps working.
         titles = "\n".join(f"{i}. {c['title']}" for i, c in enumerate(chunks, 1))
-        backend_hint = (
-            "the local model isn't reachable — is Ollama running? (`ollama serve`)"
-            if LLM_BACKEND == "ollama"
-            else "the Anthropic API is unavailable (out of credits?)"
-        )
+        backend_hint = {
+            "ollama": "the local model isn't reachable — is Ollama running? (`ollama serve`)",
+            "groq": "the Groq API is unavailable (check GROQ_API_KEY / rate limits)",
+            "anthropic": "the Anthropic API is unavailable (out of credits?)",
+        }.get(LLM_BACKEND, "the language model is unavailable")
         answer = (
             f"I couldn't generate a written answer just now — {backend_hint} "
             "But here are the most relevant sources I found:\n\n"
