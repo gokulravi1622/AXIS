@@ -21,7 +21,7 @@ const SYNC_SOURCES = [
 ]
 
 export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, onSyncDone, onClearChat, addToast, token,
-  conversations = [], currentConvId, onNewChat, onSelectConversation, onDeleteConversation }) {
+  conversations = [], currentConvId, onNewChat, onSelectConversation, onDeleteConversation, onManageConnections }) {
   const [stats, setStats] = useState({ total: 0, teams: 0, byTeam: {} })
   const [syncLoading, setSyncLoading] = useState({})
   const [syncResults, setSyncResults] = useState({})
@@ -314,6 +314,17 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         {/* Data Sync */}
         <div style={sectionLabel}>Data Sync</div>
         <div style={{ padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            onClick={onManageConnections}
+            style={{
+              width: '100%', height: 34, borderRadius: 8, border: '1px solid var(--accent)',
+              background: 'var(--accent-dim)', color: 'var(--accent-text, var(--accent))',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+              marginBottom: 2,
+            }}
+          >
+            + Connect a tool
+          </button>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {displaySources.map(([target, label]) => (
               <button

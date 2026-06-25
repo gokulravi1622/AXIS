@@ -13,6 +13,7 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('axis_token'))
   const [user, setUser] = useState(null)
   const [org, setOrg] = useState(null)
+  const [showConnect, setShowConnect] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [teamFilter, setTeamFilter] = useState(null)
   const [messages, setMessages] = useState([])
@@ -224,6 +225,17 @@ export default function App() {
     )
   }
 
+  // Re-opened from the dashboard to add/connect more tools
+  if (showConnect) {
+    return (
+      <Onboarding
+        token={token}
+        orgName={org?.name}
+        onComplete={() => setShowConnect(false)}
+      />
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -236,6 +248,7 @@ export default function App() {
         onClearChat={handleClearChat}
         addToast={addToast}
         token={token}
+        onManageConnections={() => setShowConnect(true)}
         conversations={conversations}
         currentConvId={currentConvId}
         onNewChat={handleNewChat}
