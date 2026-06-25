@@ -1,15 +1,31 @@
 """
-AXIS — SQLite database layer
-Stores users (for auth) and per-user chat messages (for personalized history).
-Local-first: a single file `axis.db` sits next to the vector store. No server needed.
+AXIS — database layer (dual-mode).
+
+Uses SQLite locally by default (a single `axis.db` file). If DATABASE_URL is set
+to a Postgres URL (e.g. Neon), it uses Postgres instead — needed for cloud hosts
+with ephemeral disks so accounts/chats/connections persist across restarts.
+
+All SQL is written with `?` placeholders and `ON CONFLICT … excluded.…`, which
+work in both engines; the connection wrapper translates `?`→`%s` for Postgres.
 """
 
+import os
 import json
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
 
 DB_PATH = Path("axis.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_PG = bool(DATABASE_URL and DATABASE_URL.startswith(("postgres://", "postgresql://")))
+
+# Exceptions that mean "unique constraint violated" (used for duplicate-email 409).
+INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+if USE_PG:
+    import psycopg
+    from psycopg.rows import dict_row
+    INTEGRITY_ERRORS = INTEGRITY_ERRORS + (psycopg.errors.UniqueViolation,)
+
 
 # Documents are identified everywhere by team + title. This packs them into one
 # stable key for the feedback score table (the \x1f unit-separator can't appear
@@ -18,12 +34,37 @@ def doc_key(team: str, title: str) -> str:
     return f"{team}\x1f{title}"
 
 
-def get_conn() -> sqlite3.Connection:
-    """Open a new connection. One per request keeps things thread-safe under FastAPI."""
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+class _Conn:
+    """Thin wrapper so the same `?`-placeholder SQL runs on SQLite and Postgres."""
+    def __init__(self, raw):
+        self.raw = raw
+
+    def execute(self, sql, params=()):
+        if USE_PG:
+            sql = sql.replace("?", "%s")
+        return self.raw.execute(sql, params)
+
+    def commit(self):
+        self.raw.commit()
+
+    def rollback(self):
+        try:
+            self.raw.rollback()
+        except Exception:
+            pass
+
+    def close(self):
+        self.raw.close()
+
+
+def get_conn() -> _Conn:
+    """Open a new connection (one per request keeps things thread-safe under FastAPI)."""
+    if USE_PG:
+        return _Conn(psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=15))
+    raw = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    raw.row_factory = sqlite3.Row
+    raw.execute("PRAGMA foreign_keys = ON")
+    return _Conn(raw)
 
 
 def now_iso() -> str:
@@ -31,99 +72,49 @@ def now_iso() -> str:
 
 
 def init_db() -> None:
-    """Create tables if they don't exist. Safe to call on every startup."""
+    """Create tables if they don't exist. Safe to call on every startup, both engines."""
+    pk = "SERIAL PRIMARY KEY" if USE_PG else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    stmts = [
+        f"""CREATE TABLE IF NOT EXISTS users (
+            id {pk}, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
+            password_hash TEXT NOT NULL, created_at TEXT NOT NULL, org_id INTEGER)""",
+        f"""CREATE TABLE IF NOT EXISTS messages (
+            id {pk}, user_id INTEGER NOT NULL, conversation_id INTEGER, role TEXT NOT NULL,
+            content TEXT NOT NULL, sources TEXT, created_at TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, id)",
+        f"""CREATE TABLE IF NOT EXISTS feedback (
+            id {pk}, user_id INTEGER NOT NULL, message_key TEXT NOT NULL, question TEXT,
+            answer TEXT, sources TEXT, vote INTEGER NOT NULL, created_at TEXT NOT NULL,
+            UNIQUE (user_id, message_key))""",
+        """CREATE TABLE IF NOT EXISTS doc_scores (
+            doc_key TEXT PRIMARY KEY, score INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS organizations (
+            id {pk}, name TEXT NOT NULL, onboarded INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS connections (
+            id {pk}, org_id INTEGER NOT NULL, provider TEXT NOT NULL, config TEXT NOT NULL,
+            connected INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+            UNIQUE (org_id, provider))""",
+        f"""CREATE TABLE IF NOT EXISTS conversations (
+            id {pk}, user_id INTEGER NOT NULL, title TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id, updated_at)",
+        """CREATE TABLE IF NOT EXISTS pending_signups (
+            email TEXT PRIMARY KEY, name TEXT NOT NULL, org_name TEXT, password_hash TEXT NOT NULL,
+            code TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL)""",
+    ]
     conn = get_conn()
     try:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                email         TEXT UNIQUE NOT NULL,
-                name          TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at    TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id    INTEGER NOT NULL,
-                role       TEXT NOT NULL,          -- 'user' | 'axis'
-                content    TEXT NOT NULL,
-                sources    TEXT,                   -- JSON array, for axis messages
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id, id);
-
-            CREATE TABLE IF NOT EXISTS feedback (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id     INTEGER NOT NULL,
-                message_key TEXT NOT NULL,        -- client-side id of the answer
-                question    TEXT,
-                answer      TEXT,
-                sources     TEXT,                 -- JSON array of {team,title,...}
-                vote        INTEGER NOT NULL,     -- 1 = up, -1 = down
-                created_at  TEXT NOT NULL,
-                UNIQUE (user_id, message_key),
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS doc_scores (
-                doc_key    TEXT PRIMARY KEY,       -- team\x1ftitle
-                score      INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS organizations (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                name       TEXT NOT NULL,
-                onboarded  INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS connections (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                org_id     INTEGER NOT NULL,
-                provider   TEXT NOT NULL,           -- jira | confluence | slack | notion | gdrive
-                config     TEXT NOT NULL,           -- Fernet-encrypted JSON
-                connected  INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL,
-                UNIQUE (org_id, provider),
-                FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS conversations (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id    INTEGER NOT NULL,
-                title      TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id, updated_at);
-
-            CREATE TABLE IF NOT EXISTS pending_signups (
-                email         TEXT PRIMARY KEY,
-                name          TEXT NOT NULL,
-                org_name      TEXT,
-                password_hash TEXT NOT NULL,
-                code          TEXT NOT NULL,
-                expires_at    TEXT NOT NULL,
-                attempts      INTEGER NOT NULL DEFAULT 0,
-                created_at    TEXT NOT NULL
-            );
-            """
-        )
-        # Migration: add org_id to users if the table predates organizations.
-        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
-        if "org_id" not in cols:
-            conn.execute("ALTER TABLE users ADD COLUMN org_id INTEGER")
-        # Migration: add conversation_id to messages if it predates conversations.
-        mcols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
-        if "conversation_id" not in mcols:
-            conn.execute("ALTER TABLE messages ADD COLUMN conversation_id INTEGER")
+        for s in stmts:
+            conn.execute(s)
+        # Legacy SQLite migration: add columns if an old local DB predates them.
+        if not USE_PG:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+            if "org_id" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN org_id INTEGER")
+            mcols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
+            if "conversation_id" not in mcols:
+                conn.execute("ALTER TABLE messages ADD COLUMN conversation_id INTEGER")
         conn.commit()
     finally:
         conn.close()
@@ -163,12 +154,12 @@ def _decrypt(token: str) -> str:
 def create_organization(name: str) -> int:
     conn = get_conn()
     try:
-        cur = conn.execute(
-            "INSERT INTO organizations (name, onboarded, created_at) VALUES (?, 0, ?)",
+        row = conn.execute(
+            "INSERT INTO organizations (name, onboarded, created_at) VALUES (?, 0, ?) RETURNING id",
             (name.strip() or "My Organization", now_iso()),
-        )
+        ).fetchone()
         conn.commit()
-        return cur.lastrowid
+        return row["id"]
     finally:
         conn.close()
 
@@ -318,12 +309,12 @@ def create_conversation(user_id: int, title: str) -> int:
     conn = get_conn()
     try:
         ts = now_iso()
-        cur = conn.execute(
-            "INSERT INTO conversations (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        row = conn.execute(
+            "INSERT INTO conversations (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?) RETURNING id",
             (user_id, title[:80] or "New chat", ts, ts),
-        )
+        ).fetchone()
         conn.commit()
-        return cur.lastrowid
+        return row["id"]
     finally:
         conn.close()
 

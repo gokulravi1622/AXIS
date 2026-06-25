@@ -7,14 +7,13 @@ Exposes FastAPI dependencies to identify the caller on protected routes.
 import os
 import hmac
 import hashlib
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
 from fastapi import Depends, HTTPException, Header
 
-from db import get_conn, now_iso
+from db import get_conn, now_iso, INTEGRITY_ERRORS
 
 # ── Config ────────────────────────────────────────────────────────────────────
 # Set AXIS_JWT_SECRET in your .env for production. The dev default keeps tokens
@@ -70,13 +69,14 @@ def create_user(email: str, name: str, password: str, org_id: int) -> dict:
     email = email.strip().lower()
     conn = get_conn()
     try:
-        cur = conn.execute(
-            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?)",
+        row = conn.execute(
+            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?) RETURNING id",
             (email, name.strip(), hash_password(password), now_iso(), org_id),
-        )
+        ).fetchone()
         conn.commit()
-        return {"id": cur.lastrowid, "email": email, "name": name.strip(), "org_id": org_id}
-    except sqlite3.IntegrityError:
+        return {"id": row["id"], "email": email, "name": name.strip(), "org_id": org_id}
+    except INTEGRITY_ERRORS:
+        conn.rollback()
         raise HTTPException(status_code=409, detail="An account with that email already exists.")
     finally:
         conn.close()
@@ -87,13 +87,14 @@ def create_user_prehashed(email: str, name: str, password_hash: str, org_id: int
     email = email.strip().lower()
     conn = get_conn()
     try:
-        cur = conn.execute(
-            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?)",
+        row = conn.execute(
+            "INSERT INTO users (email, name, password_hash, created_at, org_id) VALUES (?, ?, ?, ?, ?) RETURNING id",
             (email, name.strip(), password_hash, now_iso(), org_id),
-        )
+        ).fetchone()
         conn.commit()
-        return {"id": cur.lastrowid, "email": email, "name": name.strip(), "org_id": org_id}
-    except sqlite3.IntegrityError:
+        return {"id": row["id"], "email": email, "name": name.strip(), "org_id": org_id}
+    except INTEGRITY_ERRORS:
+        conn.rollback()
         raise HTTPException(status_code=409, detail="An account with that email already exists.")
     finally:
         conn.close()
