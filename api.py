@@ -8,7 +8,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -258,6 +258,10 @@ def oauth_start(provider: str, token: str):
 @app.get("/api/connect/{provider}/callback")
 def oauth_callback(provider: str, code: Optional[str] = None, state: Optional[str] = None,
                    error: Optional[str] = None):
+    # No OAuth params → this is a provider validating the redirect URL (Slack fetches
+    # it). Respond 200 WITHOUT a cross-domain redirect, or Slack rejects the URL.
+    if not code and not state and not error:
+        return HTMLResponse("<!doctype html><title>AXIS</title><p>AXIS connection endpoint.</p>")
     st = oauth.read_state(state) if state else None
     if error or not code or not st:
         return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={provider}")
