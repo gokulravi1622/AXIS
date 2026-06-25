@@ -8,6 +8,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -28,10 +29,11 @@ from db import (
 )
 from auth import (
     create_user, authenticate, create_token, get_current_user, get_optional_user,
-    hash_password, create_user_prehashed,
+    hash_password, create_user_prehashed, decode_token, get_user_by_id,
 )
 import connections as conn_helpers
 import mailer
+import oauth
 
 app = FastAPI(title="AXIS API")
 
@@ -231,7 +233,40 @@ def get_connections(user: dict = Depends(get_current_user)):
     for c in conns:
         cfg = get_connection_config(user["org_id"], c["provider"]) or {}
         c["teams"] = conn_helpers.connection_teams(c["provider"], cfg)
-    return {"providers": conn_helpers.PROVIDERS, "connections": conns}
+    return {
+        "providers": conn_helpers.PROVIDERS,
+        "connections": conns,
+        "oauth": oauth.oauth_providers(),  # providers offering one-click Connect
+    }
+
+
+# ── OAuth "Connect" flows ─────────────────────────────────────────────────────
+
+@app.get("/api/connect/notion/start")
+def notion_oauth_start(token: str):
+    # Browser navigation (no auth header) → identity comes via the ?token query param.
+    payload = decode_token(token)
+    user = get_user_by_id(int(payload["sub"])) if payload else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    if not oauth.configured("notion"):
+        raise HTTPException(status_code=400, detail="Notion OAuth is not configured on the server.")
+    state = oauth.make_state(user["id"], user["org_id"])
+    return RedirectResponse(oauth.notion_authorize_url(state))
+
+
+@app.get("/api/connect/notion/callback")
+def notion_oauth_callback(code: Optional[str] = None, state: Optional[str] = None,
+                          error: Optional[str] = None):
+    st = oauth.read_state(state) if state else None
+    if error or not code or not st:
+        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error=notion")
+    try:
+        config = oauth.notion_exchange(code)
+        upsert_connection(st["org"], "notion", config, connected=True)
+    except Exception:
+        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error=notion")
+    return RedirectResponse(f"{oauth.FRONTEND_URL}/?connected=notion")
 
 
 @app.post("/api/connections/test")

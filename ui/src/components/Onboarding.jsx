@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // Per-provider form fields + guided instructions shown during onboarding.
 const PROVIDERS = {
@@ -56,8 +56,34 @@ export default function Onboarding({ token, orgName, onComplete }) {
   const [selected, setSelected] = useState([])
   const [configs, setConfigs] = useState({})           // provider -> { field: value }
   const [status, setStatus] = useState({})             // provider -> { connected, message, loading }
+  const [oauthProviders, setOauthProviders] = useState([])  // providers with one-click Connect
 
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+
+  // On load: learn which providers support OAuth + reflect already-connected ones
+  // (so returning from an OAuth redirect shows them connected).
+  useEffect(() => {
+    fetch('/api/connections', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => {
+        setOauthProviders(d.oauth || [])
+        const connected = (d.connections || []).filter(c => c.connected).map(c => c.provider)
+        if (connected.length) {
+          setStatus(prev => {
+            const next = { ...prev }
+            connected.forEach(p => { next[p] = { connected: true, message: 'Connected' } })
+            return next
+          })
+          setSelected(prev => [...new Set([...prev, ...connected])])
+          setStep('connect')
+        }
+      })
+      .catch(() => {})
+  }, [token])
+
+  const startOAuth = (p) => {
+    window.location.href = `/api/connect/${p}/start?token=${encodeURIComponent(token)}`
+  }
 
   const toggle = (p) =>
     setSelected(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
@@ -160,40 +186,59 @@ export default function Onboarding({ token, orgName, onComplete }) {
                       <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>{meta.label}</span>
                       {st.connected && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>✓ connected</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>{meta.help}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {meta.fields.map(f => (
-                        <div key={f.key}>
-                          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 3 }}>{f.label}</label>
-                          {f.textarea ? (
-                            <textarea rows={4} placeholder={f.placeholder}
-                              value={(configs[p] || {})[f.key] || ''}
-                              onChange={e => setField(p, f.key, e.target.value)}
-                              style={{ ...input, resize: 'vertical', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }} />
-                          ) : (
-                            <input type={f.secret ? 'password' : 'text'} placeholder={f.placeholder}
-                              value={(configs[p] || {})[f.key] || ''}
-                              onChange={e => setField(p, f.key, e.target.value)}
-                              style={input} />
-                          )}
-                        </div>
-                      ))}
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
+                      {oauthProviders.includes(p)
+                        ? `Click connect and authorize ${meta.label} — no tokens to copy.`
+                        : meta.help}
                     </div>
-                    {st.message && (
-                      <div style={{ fontSize: 12, marginTop: 10, padding: '6px 9px', borderRadius: 6,
-                        color: st.connected ? '#10B981' : '#F87171',
-                        background: st.connected ? 'rgba(16,185,129,0.08)' : 'rgba(248,113,113,0.08)' }}>
-                        {st.message}
-                      </div>
+
+                    {oauthProviders.includes(p) ? (
+                      // One-click OAuth — sends the user to the provider to authorize
+                      <button onClick={() => startOAuth(p)} style={{
+                        height: 40, padding: '0 18px', borderRadius: 8, border: 'none',
+                        background: st.connected ? 'var(--surface2)' : meta.color,
+                        color: st.connected ? 'var(--text2)' : '#fff', fontSize: 13.5, fontWeight: 700,
+                        cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                      }}>
+                        {st.connected ? `✓ ${meta.label} connected — reconnect` : `Connect with ${meta.label}`}
+                      </button>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {meta.fields.map(f => (
+                            <div key={f.key}>
+                              <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 3 }}>{f.label}</label>
+                              {f.textarea ? (
+                                <textarea rows={4} placeholder={f.placeholder}
+                                  value={(configs[p] || {})[f.key] || ''}
+                                  onChange={e => setField(p, f.key, e.target.value)}
+                                  style={{ ...input, resize: 'vertical', fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }} />
+                              ) : (
+                                <input type={f.secret ? 'password' : 'text'} placeholder={f.placeholder}
+                                  value={(configs[p] || {})[f.key] || ''}
+                                  onChange={e => setField(p, f.key, e.target.value)}
+                                  style={input} />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {st.message && (
+                          <div style={{ fontSize: 12, marginTop: 10, padding: '6px 9px', borderRadius: 6,
+                            color: st.connected ? '#10B981' : '#F87171',
+                            background: st.connected ? 'rgba(16,185,129,0.08)' : 'rgba(248,113,113,0.08)' }}>
+                            {st.message}
+                          </div>
+                        )}
+                        <button onClick={() => connect(p)} disabled={st.loading} style={{
+                          marginTop: 12, height: 36, padding: '0 16px', borderRadius: 8, border: 'none',
+                          background: st.connected ? 'var(--surface2)' : 'var(--accent)',
+                          color: st.connected ? 'var(--text2)' : '#fff', fontSize: 13, fontWeight: 600,
+                          cursor: st.loading ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif',
+                        }}>
+                          {st.loading ? 'Testing…' : st.connected ? 'Reconnect' : 'Connect'}
+                        </button>
+                      </>
                     )}
-                    <button onClick={() => connect(p)} disabled={st.loading} style={{
-                      marginTop: 12, height: 36, padding: '0 16px', borderRadius: 8, border: 'none',
-                      background: st.connected ? 'var(--surface2)' : 'var(--accent)',
-                      color: st.connected ? 'var(--text2)' : '#fff', fontSize: 13, fontWeight: 600,
-                      cursor: st.loading ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif',
-                    }}>
-                      {st.loading ? 'Testing…' : st.connected ? 'Reconnect' : 'Connect'}
-                    </button>
                   </div>
                 )
               })}

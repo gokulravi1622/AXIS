@@ -39,3 +39,6 @@ sentence_transformers/
 .vscode/
 *.swp
 .axis_key
+
+# Claude Code local settings (may contain command history/secrets)
+.claude/settings.local.json
