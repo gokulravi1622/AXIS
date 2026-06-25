@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(streamlit run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(pkill -f \"streamlit run app.py\")",
+      "Bash(pkill -f \"streamlit run\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(kill 28750)",
+      "Bash(npm --version)",
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(echo \"UI PID: $!\")",
+      "Bash(sleep 4 && tail -20 /tmp/axis-ui.log)",
+      "Bash(find /var/folders -name \"*.png\" -newer /tmp -maxdepth 8 2>/dev/null | head -5 *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(pip show *)",
+      "Bash(pip3 show *)",
+      "Bash(pkill -f \"uvicorn api\")",
+      "Bash(uvicorn api:app --port 8000 --reload)",
+      "Bash(python -c \"from query import ask; print\\('query OK'\\)\")",
+      "Bash(python -c \"from bm25_index import BM25Index; print\\('BM25 OK'\\)\")",
+      "Bash(python -c \"from scheduler import status; print\\('scheduler OK:', status\\(\\)\\)\")",
+      "Bash(python3 -c \"from bm25_index import BM25Index; print\\('BM25 OK'\\)\")",
+      "Bash(python3 -c \"from scheduler import status; print\\('scheduler OK:', status\\(\\)\\)\")",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(curl -s http://localhost:8000/api/stats)",
+      "Bash(curl -s http://localhost:8000/api/scheduler)",
+      "Bash(python3 -c \"import googleapiclient, google.auth; print\\('✓ google libs already installed'\\)\")"
+    ]
+  }
+}

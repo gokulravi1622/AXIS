@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --accent: #6366F1;
+  --accent-h: #4F46E5;
+  --accent-dim: rgba(99, 102, 241, 0.12);
+  --c-eng: #F59E0B;
+  --c-data: #3B82F6;
+  --c-crm: #8B5CF6;
+  --c-cs: #10B981;
+  --c-prod: #EC4899;
+  --c-all: #6366F1;
+}
+
+[data-theme="dark"] {
+  --bg: #09090B;
+  --surface: #111115;
+  --surface2: #18181C;
+  --border: #27272A;
+  --border2: #3F3F46;
+  --text1: #FAFAFA;
+  --text2: #A1A1AA;
+  --text3: #52525B;
+  --user-bg: #1C1C23;
+  --user-border: #2D2D3A;
+  --input-bg: #111115;
+  --tag-bg: #18181C;
+  --accent-text: #818CF8;
+}
+
+[data-theme="light"] {
+  --bg: #F4F4F5;
+  --surface: #FFFFFF;
+  --surface2: #F4F4F5;
+  --border: #E4E4E7;
+  --border2: #D4D4D8;
+  --text1: #09090B;
+  --text2: #52525B;
+  --text3: #A1A1AA;
+  --user-bg: #EEF2FF;
+  --user-border: #C7D2FE;
+  --input-bg: #FFFFFF;
+  --tag-bg: #F4F4F5;
+  --accent-text: #4F46E5;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 3px;
+}

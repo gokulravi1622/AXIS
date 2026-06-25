@@ -1,0 +1,40 @@
+# ── Secrets / config ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*service-account*.json
+*-credentials.json
+credentials.json
+
+# ── Generated data stores ─────────────────────────────────────────
+axis_db/
+axis.db
+axis.db-journal
+axis.db-wal
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / frontend ───────────────────────────────────────────────
+ui/node_modules/
+ui/dist/
+node_modules/
+*.log
+npm-debug.log*
+
+# ── ML model caches ───────────────────────────────────────────────
+.cache/
+sentence_transformers/
+
+# ── OS / editor ───────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp

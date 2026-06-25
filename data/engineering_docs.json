@@ -1,0 +1,108 @@
+[
+  {
+    "id": "eng_001",
+    "team": "Engineering",
+    "title": "MemberApp API Authentication Flow",
+    "content": "MemberApp uses JWT-based authentication. Tokens are issued by the AuthService at /api/v2/auth/token with a 24-hour expiry. Refresh tokens are valid for 30 days and stored in Redis. All downstream services validate tokens via the shared AuthMiddleware package. Service-to-service calls use internal API keys stored in Vault under /secret/services/{service_name}/api_key. Never hardcode API keys in source code.",
+    "tags": [
+      "auth",
+      "jwt",
+      "api",
+      "security"
+    ]
+  },
+  {
+    "id": "eng_002",
+    "team": "Engineering",
+    "title": "Rewards Service Architecture",
+    "content": "The Rewards Service (RWD) handles all member reward lifecycle events: earn, hold, release, and redeem. It is a Node.js microservice running on ECS Fargate. It consumes events from the rewards-events SQS queue and writes to the rewards_ledger PostgreSQL table. Reward transactions must be idempotent \u2014 use the transaction_ref_id field to deduplicate. RWD communicates with the Wallet Service for balance updates and the Notification Service for member alerts.",
+    "tags": [
+      "rewards",
+      "microservice",
+      "sqs",
+      "postgres"
+    ]
+  },
+  {
+    "id": "eng_003",
+    "team": "Engineering",
+    "title": "Benefits Card Issuance Runbook",
+    "content": "To issue a new prepaid benefits card: 1) Verify member eligibility via EligibilityService GET /members/{id}/eligibility. 2) POST to CardService /cards/issue with member_id, plan_id, and benefit_type. 3) CardService calls the FIS gateway synchronously \u2014 timeout is 10s. 4) On success, store card_token in the members table. 5) Trigger card_issued event to SQS. Common failure: FIS timeout \u2014 retry up to 3 times with exponential backoff. Escalate to on-call if all retries fail.",
+    "tags": [
+      "benefits",
+      "card",
+      "fis",
+      "runbook",
+      "issuance"
+    ]
+  },
+  {
+    "id": "eng_004",
+    "team": "Engineering",
+    "title": "Local Development Setup Guide",
+    "content": "Prerequisites: Node.js 20+, Docker Desktop, AWS CLI v2, Vault CLI. Clone the monorepo from internal Git. Run `make bootstrap` to pull secrets from Vault and start local dependencies via Docker Compose (Postgres, Redis, LocalStack). Use `make dev` to start all services. The local environment uses synthetic tenant data \u2014 never connect to production from your local machine. Port mapping: AuthService 3001, RewardsService 3002, BenefitsService 3003, NotificationService 3004.",
+    "tags": [
+      "dev",
+      "setup",
+      "local",
+      "onboarding"
+    ]
+  },
+  {
+    "id": "eng_005",
+    "team": "Engineering",
+    "title": "Deployment Process \u2014 Production",
+    "content": "All deployments go through the CI/CD pipeline in GitHub Actions. Merging to main triggers a staging deploy automatically. Production deploys require a manual approval from a senior engineer in the GitHub Actions UI. Deployment steps: build Docker image \u2192 push to ECR \u2192 run DB migrations via Flyway \u2192 rolling ECS update. Rollback: re-run the last successful pipeline with the ROLLBACK=true flag. Monitor deploy health via the #deployments Slack channel and the ECS service metrics dashboard.",
+    "tags": [
+      "deployment",
+      "cicd",
+      "production",
+      "github-actions"
+    ]
+  },
+  {
+    "id": "eng_006",
+    "team": "Engineering",
+    "title": "Incident Response Playbook",
+    "content": "Severity levels: P1 (service down, all members affected), P2 (partial degradation), P3 (non-critical issue). P1: page on-call immediately via PagerDuty, create a war-room in #incident-{date} Slack channel, update status page within 5 minutes. P2: notify team lead, create Jira incident ticket, resolve within 4 hours. Postmortem required for all P1 and P2 incidents \u2014 due within 48 hours. Template is in Confluence under Engineering > Incident Templates.",
+    "tags": [
+      "incident",
+      "oncall",
+      "pagerduty",
+      "p1",
+      "p2"
+    ]
+  },
+  {
+    "id": "eng_007",
+    "team": "Engineering",
+    "title": "Health Actions Tracking Service",
+    "content": "The Health Actions Service (HAS) tracks member completion of health tasks such as surveys, wellness check-ins, and fitness challenges. Built in Python/FastAPI. Actions are defined per tenant in the actions_config table. On completion, HAS emits an action_completed event to SNS which triggers downstream reward crediting. Each action has a cooldown period (default 24h) to prevent duplicate completions. Action eligibility rules are evaluated client-side and re-validated server-side.",
+    "tags": [
+      "health-actions",
+      "fastapi",
+      "sns",
+      "rewards"
+    ]
+  },
+  {
+    "id": "eng_008",
+    "team": "Engineering",
+    "title": "Multi-Tenant Configuration",
+    "content": "AXIS platform is multi-tenant. Each tenant (client organization) has a tenant_id and a configuration record in the tenant_config table. Tenant configs define: reward caps, eligible benefit types, branding (logo, colors), enabled features, and data-sharing consents. Tenant context is injected into every request via the TenantMiddleware, which reads the X-Tenant-ID header. Never assume a global default \u2014 always scope queries and logic to the tenant context.",
+    "tags": [
+      "multi-tenant",
+      "config",
+      "middleware",
+      "tenant"
+    ]
+  },
+  {
+    "id": "eng_009",
+    "team": "Engineering",
+    "title": "test, verify",
+    "content": "This is a test context entry submitted from the AXIS UI to verify the Add Context form works end to end.",
+    "tags": [],
+    "author": "Jira sync test entry"
+  }
+]
