@@ -160,20 +160,37 @@ export default function App() {
     const streamId = crypto.randomUUID()
     setMessages(prev => [...prev, { role: 'axis', id: streamId, question, content: '', sources: [], feedback: null, streaming: true }])
 
+    const reqBody = JSON.stringify({
+      question,
+      team_filter: teamFilter || undefined,
+      history: apiHistory,
+      conversation_id: currentConvId || undefined,
+    })
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+
     try {
       const res = await fetch('/api/ask/stream', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          question,
-          team_filter: teamFilter || undefined,
-          history: apiHistory,
-          conversation_id: currentConvId || undefined,
-        }),
+        headers: authHeaders,
+        body: reqBody,
       })
+
+      // Fall back to non-streaming endpoint if stream is unavailable
+      if (!res.ok) {
+        const json = await fetch('/api/ask', { method: 'POST', headers: authHeaders, body: reqBody })
+          .then(r => r.json())
+        setMessages(prev => prev.map(m => m.id === streamId
+          ? { ...m, content: json.answer || 'No answer returned.', sources: json.sources || [], streaming: false }
+          : m))
+        if (json.conversation_id && json.conversation_id !== currentConvId) {
+          setCurrentConvId(json.conversation_id)
+          loadConversations()
+        }
+        return
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
