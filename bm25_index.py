@@ -4,12 +4,13 @@ Builds a BM25 index over all data/*.json files for hybrid retrieval.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
 from rank_bm25 import BM25Okapi
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(os.environ.get("AXIS_DATA_DIR", str(Path(__file__).parent / "data")))
 
 DATA_FILES = [
     "engineering_docs.json",

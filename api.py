@@ -6,13 +6,44 @@ from dotenv import load_dotenv
 # is no .env — secrets come from the host's environment, so this is a safe no-op.
 load_dotenv()
 
+import json as _json
+import asyncio
+import uuid
+import logging
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from query import ask
+# ── Structured logging ────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":%(message)s}',
+)
+logger = logging.getLogger("axis.api")
+
+# ── Sentry (opt-in via SENTRY_DSN env var) ────────────────────────────────────
+_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        integrations=[
+            FastApiIntegration(),
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+        ],
+        traces_sample_rate=0.2,
+        environment=os.environ.get("AXIS_ENV", "production"),
+    )
+    logger.info('"Sentry initialised"')
+
+# ── Background sync job registry ─────────────────────────────────────────────
+_sync_jobs: dict[str, dict] = {}   # job_id → {status, log, result, error, started_at, finished_at}
+
+from query import ask, build_ask_messages, stream_answer
 from contribute import submit_context, get_doc_count
 from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
@@ -355,6 +386,7 @@ def ask_axis(req: AskRequest, user: Optional[dict] = Depends(get_optional_user))
                 "relevance": s["relevance"],
                 "url": s.get("url", ""),
                 "source": s.get("source", ""),
+                "content": s.get("content", ""),
             }
             for s in sources
         ]
@@ -378,7 +410,62 @@ def ask_axis(req: AskRequest, user: Optional[dict] = Depends(get_optional_user))
             "title": title,
         }
     except Exception as e:
+        logger.error(f'"ask failed" question="{req.question[:80]}" error="{e}"')
+        if _sentry_dsn:
+            sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ask/stream")
+async def ask_stream(req: AskRequest, user: Optional[dict] = Depends(get_optional_user)):
+    """Server-Sent Events streaming endpoint. Yields sources first, then tokens."""
+    def _sse(obj: dict) -> str:
+        return f"data: {_json.dumps(obj)}\n\n"
+
+    def event_generator():
+        try:
+            messages, chunks = build_ask_messages(
+                req.question,
+                chat_history=req.history[-6:] if req.history else None,
+                team_filter=req.team_filter,
+            )
+            clean_sources = [
+                {
+                    "team": c["team"],
+                    "title": c["title"],
+                    "relevance": c["relevance"],
+                    "url": c.get("url", ""),
+                    "source": c.get("source", ""),
+                    "content": c.get("content", ""),
+                }
+                for c in chunks
+            ]
+            yield _sse({"type": "sources", "sources": clean_sources})
+
+            full_answer = []
+            for token in stream_answer(messages):
+                full_answer.append(token)
+                yield _sse({"type": "token", "text": token})
+
+            answer = "".join(full_answer)
+            yield _sse({"type": "done"})
+
+            # Persist for logged-in users
+            if user:
+                conversation_id = req.conversation_id
+                if conversation_id and not conversation_belongs_to(user["id"], conversation_id):
+                    conversation_id = None
+                if not conversation_id:
+                    conversation_id = create_conversation(user["id"], req.question.strip()[:48] or "New chat")
+                add_message(conversation_id, user["id"], "user", req.question)
+                add_message(conversation_id, user["id"], "axis", answer, clean_sources)
+                yield _sse({"type": "conversation_id", "id": conversation_id})
+
+        except Exception as e:
+            yield _sse({"type": "error", "message": str(e)})
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ── Conversations ─────────────────────────────────────────────────────────────
@@ -418,42 +505,73 @@ def _apply_org_connections(org_id, target):
                 os.environ["CONFLUENCE_OAUTH_ORG_ID"] = str(org_id)
 
 
-@app.post("/api/sync")
-def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user)):
-    log = []
+def _run_sync_blocking(target: str, log: list, org_id=None) -> dict:
+    """Blocking sync — called inside asyncio.to_thread so it doesn't block the event loop."""
+    if org_id:
+        _apply_org_connections(org_id, target)
+    if target == "jira":
+        res = sync_jira(progress_cb=log.append)
+        return {"jira": res.get("synced", 0)}
+    elif target == "confluence":
+        res = sync_confluence(progress_cb=log.append)
+        return {"confluence": res.get("synced", 0)}
+    elif target == "slack":
+        res = sync_slack(progress_cb=log.append)
+        return {"slack": res.get("synced", 0)}
+    elif target == "notion":
+        res = sync_notion(progress_cb=log.append)
+        return {"notion": res.get("synced", 0)}
+    elif target == "gdrive":
+        res = sync_gdrive(progress_cb=log.append)
+        return {"gdrive": res.get("synced", 0)}
+    else:
+        res = sync_all(progress_cb=log.append)
+        return {
+            "jira": res["jira"].get("synced") if res.get("jira") else None,
+            "confluence": res["confluence"].get("synced") if res.get("confluence") else None,
+            "slack": res["slack"].get("synced") if res.get("slack") else None,
+            "gdrive": res["gdrive"].get("synced") if res.get("gdrive") else None,
+            "errors": res.get("errors", []),
+        }
+
+
+async def _run_sync_job(job_id: str, target: str, org_id=None):
+    job = _sync_jobs[job_id]
+    job["status"] = "running"
+    logger.info(f'"Sync job {job_id} started" target="{target}"')
     try:
-        # If the caller is logged in, drive sync from their org's stored connections;
-        # otherwise fall back to whatever is configured in the environment (.env).
-        if user:
-            _apply_org_connections(user.get("org_id"), req.target)
-        if req.target == "jira":
-            res = sync_jira(progress_cb=log.append)
-            return {"jira": res["synced"], "confluence": None, "slack": None, "log": log}
-        elif req.target == "confluence":
-            res = sync_confluence(progress_cb=log.append)
-            return {"jira": None, "confluence": res["synced"], "slack": None, "log": log}
-        elif req.target == "slack":
-            res = sync_slack(progress_cb=log.append)
-            return {"slack": res["synced"], "log": log}
-        elif req.target == "notion":
-            res = sync_notion(progress_cb=log.append)
-            return {"notion": res["synced"], "log": log}
-        elif req.target == "gdrive":
-            res = sync_gdrive(progress_cb=log.append)
-            return {"gdrive": res["synced"], "log": log}
-        else:
-            res = sync_all(progress_cb=log.append)
-            return {
-                "jira": res["jira"]["synced"] if res["jira"] else None,
-                "confluence": res["confluence"]["synced"] if res["confluence"] else None,
-                "slack": res["slack"]["synced"] if res["slack"] else None,
-                "notion": res["notion"]["synced"] if res["notion"] else None,
-                "gdrive": res["gdrive"]["synced"] if res["gdrive"] else None,
-                "errors": res.get("errors", []),
-                "log": log,
-            }
+        result = await asyncio.to_thread(_run_sync_blocking, target, job["log"], org_id)
+        job.update({"status": "done", "result": result,
+                    "finished_at": datetime.utcnow().isoformat() + "Z"})
+        logger.info(f'"Sync job {job_id} done" result="{result}"')
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        job.update({"status": "error", "error": str(e),
+                    "finished_at": datetime.utcnow().isoformat() + "Z"})
+        logger.error(f'"Sync job {job_id} failed" error="{e}"')
+        if _sentry_dsn:
+            sentry_sdk.capture_exception(e)
+
+
+@app.post("/api/sync")
+async def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user)):
+    """Start a background sync job; returns job_id immediately."""
+    job_id = str(uuid.uuid4())[:8]
+    _sync_jobs[job_id] = {
+        "id": job_id, "target": req.target, "status": "queued",
+        "log": [], "result": None, "error": None,
+        "started_at": datetime.utcnow().isoformat() + "Z", "finished_at": None,
+    }
+    org_id = user.get("org_id") if user else None
+    asyncio.create_task(_run_sync_job(job_id, req.target, org_id))
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/api/sync/job/{job_id}")
+def sync_job_status(job_id: str):
+    job = _sync_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @app.get("/api/scheduler")

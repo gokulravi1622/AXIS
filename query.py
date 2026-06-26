@@ -14,7 +14,7 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 from sentence_transformers import CrossEncoder
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DB_DIR = Path("axis_db")
+DB_DIR = Path(os.environ.get("AXIS_DB_DIR", str(Path(__file__).parent / "axis_db")))
 COLLECTION_NAME = "axis_context"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -54,12 +54,11 @@ If the context does not contain enough information to answer, say so clearly —
 When answering follow-up questions, use the conversation history to understand context (e.g. 'it', 'that feature', 'the issue above' refer to earlier messages).
 
 How to write your answers:
-- Write like a helpful human colleague explaining something over chat — casual, clear, direct
-- NEVER use markdown: no ## headers, no ** bold, no bullet dashes, no ---, no > blockquotes, no backticks
-- For steps, just write "1. ... 2. ... 3. ..." on separate lines — no other formatting
-- Explain any technical term in plain words the first time you use it
-- Keep it short — most answers should be under 150 words
-- End with a single plain sentence saying which team and document the answer came from
+- Write like a helpful human colleague — clear, direct, and practical
+- Use markdown formatting: **bold** for key terms, `code` for technical values/commands, bullet lists for multiple items, numbered lists for steps
+- Use ## headings only when the answer has clearly distinct sections
+- Keep answers concise — most should be under 200 words
+- End with a brief italic note like *Source: [Team] — [Document title]*
 """
 
 
@@ -196,9 +195,10 @@ def rerank(query: str, chunks: list[dict]) -> list[dict]:
     ranked.sort(key=lambda x: x[0], reverse=True)
 
     result = []
+    import math
     for _adjusted, ce_score, chunk in ranked[:RERANK_TOP_K]:
-        # relevance shown to the user stays the semantic match score
-        chunk["relevance"] = round(ce_score * 100, 1)
+        # Sigmoid converts raw cross-encoder logit → 0–100% relevance
+        chunk["relevance"] = round(100 / (1 + math.exp(-float(ce_score))), 1)
         result.append(chunk)
     return result
 
@@ -234,6 +234,103 @@ def build_context_block(chunks: list[dict]) -> str:
         lines.append(chunk["content"])
         lines.append("")
     return "\n".join(lines)
+
+
+# ── Streaming answer generator ────────────────────────────────────────────────
+def stream_anthropic(messages: list[dict]):
+    """Yield text tokens from Anthropic streaming API."""
+    with get_anthropic().messages.stream(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        system=SYSTEM_PROMPT,
+        messages=messages,
+    ) as stream:
+        for text in stream.text_stream:
+            yield text
+
+
+def stream_groq(messages: list[dict]):
+    """Yield text tokens from Groq streaming API."""
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY not set.")
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+        "max_tokens": 1024,
+        "stream": True,
+    }
+    with requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload, stream=True, timeout=60,
+    ) as resp:
+        resp.raise_for_status()
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            text = line.decode() if isinstance(line, bytes) else line
+            if text.startswith("data: "):
+                payload_str = text[6:]
+                if payload_str.strip() == "[DONE]":
+                    break
+                import json as _json
+                chunk = _json.loads(payload_str)
+                delta = chunk["choices"][0].get("delta", {})
+                if "content" in delta and delta["content"]:
+                    yield delta["content"]
+
+
+def stream_ollama(messages: list[dict]):
+    """Yield text tokens from Ollama streaming API."""
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+        "stream": True,
+    }
+    with requests.post(f"{OLLAMA_URL}/api/chat", json=payload, stream=True, timeout=180) as resp:
+        resp.raise_for_status()
+        import json as _json
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            chunk = _json.loads(line)
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yield content
+            if chunk.get("done"):
+                break
+
+
+def stream_answer(messages: list[dict]):
+    """Dispatch streaming to the configured backend."""
+    if LLM_BACKEND == "anthropic":
+        yield from stream_anthropic(messages)
+    elif LLM_BACKEND == "groq":
+        yield from stream_groq(messages)
+    else:
+        yield from stream_ollama(messages)
+
+
+def build_ask_messages(
+    question: str,
+    chat_history: Optional[list[dict]] = None,
+    team_filter: Optional[str] = None,
+) -> tuple[list[dict], list[dict]]:
+    """Shared setup: retrieve + rerank + build messages. Returns (messages, chunks)."""
+    if chat_history:
+        chat_history = chat_history[-HISTORY_WINDOW:]
+    retrieval_query = question
+    if chat_history:
+        last_msgs = [m["content"] for m in chat_history[-4:] if m["role"] == "user"]
+        if last_msgs:
+            retrieval_query = " | ".join(last_msgs[-2:]) + " | " + question
+    chunks = hybrid_retrieve(retrieval_query, team_filter=team_filter)
+    chunks = rerank(question, chunks)
+    context = build_context_block(chunks)
+    messages = list(chat_history or [])
+    messages.append({"role": "user", "content": f"{context}\n\nQuestion: {question}"})
+    return messages, chunks
 
 
 # ── Answer generation backends ───────────────────────────────────────────────
@@ -297,33 +394,7 @@ def ask(
     Ask AXIS a question.
     Returns: (answer_text, source_chunks_used)
     """
-    # Sliding window: keep only recent history
-    if chat_history:
-        chat_history = chat_history[-HISTORY_WINDOW:]
-
-    # Build retrieval query with recent user context for better recall
-    retrieval_query = question
-    if chat_history:
-        last_msgs = [m["content"] for m in chat_history[-4:] if m["role"] == "user"]
-        if last_msgs:
-            retrieval_query = " | ".join(last_msgs[-2:]) + " | " + question
-
-    chunks = hybrid_retrieve(retrieval_query, team_filter=team_filter)
-    chunks = rerank(question, chunks)
-    context = build_context_block(chunks)
-
-    # Build messages
-    messages = []
-
-    # Inject past conversation if provided
-    if chat_history:
-        messages.extend(chat_history)
-
-    # Add current question with context
-    messages.append({
-        "role": "user",
-        "content": f"{context}\n\nQuestion: {question}",
-    })
+    messages, chunks = build_ask_messages(question, chat_history, team_filter)
 
     try:
         answer = generate_answer(messages)

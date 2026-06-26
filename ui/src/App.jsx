@@ -9,7 +9,7 @@ import Login from './components/Login'
 import Onboarding from './components/Onboarding'
 
 export default function App() {
-  const [theme, setTheme] = useState('dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('axis_theme') || 'dark')
   const [token, setToken] = useState(() => localStorage.getItem('axis_token'))
   const [user, setUser] = useState(null)
   const [org, setOrg] = useState(null)
@@ -24,10 +24,27 @@ export default function App() {
   const [toasts, setToasts] = useState([])
   const chatEndRef = useRef(null)
   const lastSeenTs = useRef(null)
+  const inputBarRef = useRef(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('axis_theme', theme)
   }, [theme])
+
+  // Persist guest messages to localStorage (logged-in users have server-side persistence)
+  useEffect(() => {
+    if (!token) localStorage.setItem('axis_guest_messages', JSON.stringify(messages))
+  }, [messages, token])
+
+  // Restore guest messages on mount
+  useEffect(() => {
+    if (!token) {
+      try {
+        const saved = localStorage.getItem('axis_guest_messages')
+        if (saved) setMessages(JSON.parse(saved))
+      } catch {}
+    }
+  }, []) // eslint-disable-line
 
   // Validate any stored token on mount / when it changes
   useEffect(() => {
@@ -133,17 +150,18 @@ export default function App() {
   const handleSend = async (question) => {
     if (!question.trim() || loading) return
 
-    // Build the API history from the current on-screen messages (this conversation).
     const apiHistory = messages
       .map(m => ({ role: m.role === 'axis' ? 'assistant' : 'user', content: m.content }))
       .slice(-10)
 
-    const userMsg = { role: 'user', content: question }
-    setMessages(prev => [...prev, userMsg])
+    setMessages(prev => [...prev, { role: 'user', content: question }])
     setLoading(true)
 
+    const streamId = crypto.randomUUID()
+    setMessages(prev => [...prev, { role: 'axis', id: streamId, question, content: '', sources: [], feedback: null, streaming: true }])
+
     try {
-      const res = await fetch('/api/ask', {
+      const res = await fetch('/api/ask/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,22 +174,38 @@ export default function App() {
           conversation_id: currentConvId || undefined,
         }),
       })
-      const data = await res.json()
-      const axisMsg = {
-        role: 'axis',
-        id: crypto.randomUUID(),
-        question,
-        content: data.answer,
-        sources: data.sources || [],
-        feedback: null,   // null | 1 | -1
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const evt = JSON.parse(line.slice(6))
+            if (evt.type === 'sources') {
+              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, sources: evt.sources } : m))
+            } else if (evt.type === 'token') {
+              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: m.content + evt.text } : m))
+            } else if (evt.type === 'done') {
+              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, streaming: false } : m))
+            } else if (evt.type === 'conversation_id') {
+              if (evt.id !== currentConvId) setCurrentConvId(evt.id)
+              loadConversations()
+            } else if (evt.type === 'error') {
+              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: 'Sorry, something went wrong. Please try again.', streaming: false } : m))
+            }
+          } catch {}
+        }
       }
-      setMessages(prev => [...prev, axisMsg])
-      if (data.conversation_id && data.conversation_id !== currentConvId) {
-        setCurrentConvId(data.conversation_id)
-      }
-      loadConversations()   // refresh the chat list (new chat appears / reorders)
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'axis', content: 'Sorry, something went wrong. Please try again.', sources: [] }])
+    } catch {
+      setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: 'Sorry, something went wrong. Please try again.', streaming: false } : m))
     } finally {
       setLoading(false)
     }
@@ -211,7 +245,7 @@ export default function App() {
 
   // Not logged in → show the login / sign-up screen
   if (!user) {
-    return <Login onAuth={handleAuth} />
+    return <Login onAuth={handleAuth} theme={theme} setTheme={setTheme} />
   }
 
   // Logged in but the org hasn't finished onboarding → connection wizard
@@ -261,7 +295,7 @@ export default function App() {
           <ChatArea messages={messages} loading={loading} onSuggest={handleSend} onFeedback={handleFeedback} />
           <div ref={chatEndRef} />
         </div>
-        <InputBar onSend={handleSend} disabled={loading} />
+        <InputBar ref={inputBarRef} onSend={handleSend} disabled={loading} />
       </div>
     </div>
   )

@@ -92,6 +92,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
     setSyncLoading(prev => ({ ...prev, [target]: true }))
     setSyncResults(prev => ({ ...prev, [target]: null }))
     try {
+      // Start background job — returns immediately with job_id
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: {
@@ -100,22 +101,41 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         },
         body: JSON.stringify({ target }),
       })
-      const data = await res.json()
-      setSyncResults(prev => ({ ...prev, [target]: data }))
-      if (data.log) setSyncLog(data.log)
-      if (onSyncDone && data.log) onSyncDone(data.log)
-      if (addToast) {
-        const label = Object.fromEntries(SYNC_SOURCES)
-        const message = target === 'both'
-          ? 'Synced — ' + SYNC_SOURCES.map(([k, l]) => `${l} ${data[k] ?? 0}`).join(' · ')
-          : `${label[target] || target}: ${data[target] ?? 0} synced`
-        addToast({ type: 'manual_sync', message, timestamp: new Date().toISOString() })
+      const { job_id } = await res.json()
+
+      // Poll job status until done or error
+      const poll = async () => {
+        const statusRes = await fetch(`/api/sync/job/${job_id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        const job = await statusRes.json()
+        if (job.log?.length) setSyncLog(job.log)
+        if (job.status === 'done') {
+          setSyncResults(prev => ({ ...prev, [target]: job.result }))
+          setSyncLoading(prev => ({ ...prev, [target]: false }))
+          if (onSyncDone) onSyncDone(job.log || [])
+          if (addToast) {
+            const result = job.result || {}
+            const counts = Object.entries(result)
+              .filter(([k, v]) => v != null && k !== 'errors')
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(' · ')
+            addToast({ type: 'manual_sync', message: `Sync complete — ${counts || '0 docs'}`, timestamp: new Date().toISOString() })
+          }
+        } else if (job.status === 'error') {
+          setSyncResults(prev => ({ ...prev, [target]: { error: job.error } }))
+          setSyncLoading(prev => ({ ...prev, [target]: false }))
+          if (addToast) addToast({ type: 'error', message: `${target} sync failed: ${job.error}`, timestamp: new Date().toISOString() })
+        } else {
+          // still queued or running — check again in 1.5s
+          setTimeout(poll, 1500)
+        }
       }
+      setTimeout(poll, 800)
     } catch {
       setSyncResults(prev => ({ ...prev, [target]: { error: 'Sync failed' } }))
-      if (addToast) addToast({ type: 'error', message: `${target} sync failed`, timestamp: new Date().toISOString() })
-    } finally {
       setSyncLoading(prev => ({ ...prev, [target]: false }))
+      if (addToast) addToast({ type: 'error', message: `${target} sync failed`, timestamp: new Date().toISOString() })
     }
   }
 

@@ -24,7 +24,7 @@ from requests.auth import HTTPBasicAuth
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-DB_DIR = Path("axis_db")
+DB_DIR = Path(os.environ.get("AXIS_DB_DIR", str(Path(__file__).parent / "axis_db")))
 COLLECTION_NAME = "axis_context"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 

@@ -4,14 +4,15 @@ Lets employees submit new context entries that are immediately searchable.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-DATA_DIR = Path("data")
-DB_DIR = Path("axis_db")
+DATA_DIR = Path(os.environ.get("AXIS_DATA_DIR", str(Path(__file__).parent / "data")))
+DB_DIR = Path(os.environ.get("AXIS_DB_DIR", str(Path(__file__).parent / "axis_db")))
 COLLECTION_NAME = "axis_context"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 

@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JIRA_BASE_URL=${JIRA_BASE_URL}
+      - JIRA_EMAIL=${JIRA_EMAIL}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_PROJECTS=${JIRA_PROJECTS:-SCRUM}
+      - CONFLUENCE_SPACES=${CONFLUENCE_SPACES:-ENG,DATA}
+      - AXIS_LLM_BACKEND=${AXIS_LLM_BACKEND:-anthropic}
+      - AXIS_SYNC_INTERVAL_HOURS=${AXIS_SYNC_INTERVAL_HOURS:-6}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - AXIS_ENV=${AXIS_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - AXIS_DB_DIR=/data/axis_db
+      - AXIS_DATA_DIR=/data/docs
+    volumes:
+      - axis_data:/data          # persistent vector store + docs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  axis_data:
+    driver: local
