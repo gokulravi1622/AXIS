@@ -67,7 +67,10 @@ export default function Onboarding({ token, orgName, onComplete }) {
       .then(r => r.json())
       .then(d => {
         setOauthProviders(d.oauth || [])
-        const connected = (d.connections || []).filter(c => c.connected).map(c => c.provider)
+        // Only consider providers we know how to render (ignore legacy/unknown ones)
+        const connected = (d.connections || [])
+          .filter(c => c.connected && PROVIDERS[c.provider])
+          .map(c => c.provider)
         if (connected.length) {
           setStatus(prev => {
             const next = { ...prev }
@@ -181,6 +184,7 @@ export default function Onboarding({ token, orgName, onComplete }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {selected.map(p => {
                 const meta = PROVIDERS[p]
+                if (!meta) return null
                 const st = status[p] || {}
                 return (
                   <div key={p} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 18 }}>
