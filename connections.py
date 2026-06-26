@@ -69,11 +69,17 @@ def apply_env(provider: str, config: dict) -> None:
         os.environ["NOTION_TOKEN"] = config.get("token", "")
         os.environ["NOTION_TEAM"] = config.get("team", "Product")
     elif provider == "gdrive":
-        os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = _write_service_account(
-            config.get("service_account_json", "")
-        )
-        os.environ["GDRIVE_TEAM"] = config.get("team", "Data")
-        os.environ["GDRIVE_FOLDER_ID"] = config.get("folder_id", "")
+        if config.get("refresh_token"):
+            os.environ["GDRIVE_OAUTH_REFRESH_TOKEN"] = config["refresh_token"]
+            os.environ["GDRIVE_OAUTH_TEAM"] = config.get("team", "Data")
+            os.environ.pop("GOOGLE_SERVICE_ACCOUNT_FILE", None)
+        else:
+            os.environ.pop("GDRIVE_OAUTH_REFRESH_TOKEN", None)
+            os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = _write_service_account(
+                config.get("service_account_json", "")
+            )
+            os.environ["GDRIVE_TEAM"] = config.get("team", "Data")
+            os.environ["GDRIVE_FOLDER_ID"] = config.get("folder_id", "")
 
 
 def connection_teams(provider: str, config: dict) -> list[str]:

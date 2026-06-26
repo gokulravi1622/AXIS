@@ -48,6 +48,16 @@ ATLASSIAN_SCOPES = ("read:jira-work read:jira-user read:confluence-content.all "
                     "read:confluence-space.summary offline_access")
 
 
+# ── Google Drive ──────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET")
+GDRIVE_REDIRECT_URI = os.environ.get(
+    "GDRIVE_REDIRECT_URI", "http://localhost:8000/api/connect/gdrive/callback"
+)
+GDRIVE_OAUTH_TEAM = os.environ.get("GDRIVE_DEFAULT_TEAM", "Data")
+GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+
+
 def configured(provider: str) -> bool:
     if provider == "notion":
         return bool(NOTION_CLIENT_ID and NOTION_CLIENT_SECRET)
@@ -56,11 +66,13 @@ def configured(provider: str) -> bool:
     # Jira and Confluence are both backed by one Atlassian OAuth app.
     if provider in ("jira", "confluence"):
         return bool(ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET)
+    if provider == "gdrive":
+        return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
     return False
 
 
 def oauth_providers() -> list[str]:
-    return [p for p in ("notion", "slack", "jira", "confluence") if configured(p)]
+    return [p for p in ("notion", "slack", "jira", "confluence", "gdrive") if configured(p)]
 
 
 # ── Generic dispatch (used by the /api/connect/{provider}/* endpoints) ─────────
@@ -71,6 +83,8 @@ def authorize_url(provider: str, state: str) -> str:
         return slack_authorize_url(state)
     if provider in ("jira", "confluence"):
         return atlassian_authorize_url(state)
+    if provider == "gdrive":
+        return gdrive_authorize_url(state)
     raise ValueError(f"No OAuth for provider: {provider}")
 
 
@@ -81,6 +95,8 @@ def exchange(provider: str, code: str) -> dict:
         return slack_exchange(code)
     if provider in ("jira", "confluence"):
         return atlassian_exchange(code)
+    if provider == "gdrive":
+        return gdrive_exchange(code)
     raise ValueError(f"No OAuth for provider: {provider}")
 
 
@@ -194,3 +210,31 @@ def atlassian_exchange(code: str) -> dict:
         "site_url": site.get("url", ""),
         "team": ATLASSIAN_DEFAULT_TEAM,
     }
+
+
+# ── Google Drive authorize + exchange ─────────────────────────────────────────
+def gdrive_authorize_url(state: str) -> str:
+    q = urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GDRIVE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": GDRIVE_SCOPE,
+        "access_type": "offline",   # so we get a refresh token
+        "prompt": "consent",
+        "state": state,
+    })
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{q}"
+
+
+def gdrive_exchange(code: str) -> dict:
+    r = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={"code": code, "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
+              "redirect_uri": GDRIVE_REDIRECT_URI, "grant_type": "authorization_code"},
+        timeout=15,
+    )
+    r.raise_for_status()
+    tok = r.json()
+    if not tok.get("refresh_token"):
+        raise RuntimeError("Google did not return a refresh token (need access_type=offline + prompt=consent).")
+    return {"refresh_token": tok["refresh_token"], "team": GDRIVE_OAUTH_TEAM}

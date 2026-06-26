@@ -682,25 +682,43 @@ def sync_notion(progress_cb=None) -> dict:
 #   GDRIVE_TEAM=Data            (AXIS team all Drive docs are filed under)
 #   GDRIVE_FOLDER_ID=...        (optional — limit to one folder)
 
-def sync_gdrive(progress_cb=None) -> dict:
-    """Sync Google Docs the service account can access into ChromaDB."""
-    sa_file = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
-    if not sa_file:
-        raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_FILE (path to a service-account JSON key).")
+GDRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
+
+def _gdrive_service_and_team():
+    """Build a Drive client + team, from OAuth (user's Drive) or a service account."""
     try:
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
     except ImportError:
         raise RuntimeError("Google libs not installed. Run: pip install google-api-python-client google-auth")
 
-    team = os.environ.get("GDRIVE_TEAM", "Data")
-    folder = os.environ.get("GDRIVE_FOLDER_ID", "")
+    if os.environ.get("GDRIVE_OAUTH_REFRESH_TOKEN"):
+        from google.oauth2.credentials import Credentials
+        creds = Credentials(
+            None,
+            refresh_token=os.environ["GDRIVE_OAUTH_REFRESH_TOKEN"],
+            client_id=os.environ.get("GOOGLE_OAUTH_CLIENT_ID"),
+            client_secret=os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"),
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=GDRIVE_SCOPES,
+        )
+        team = os.environ.get("GDRIVE_OAUTH_TEAM", "Data")
+        folder = ""
+    else:
+        sa_file = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+        if not sa_file:
+            raise RuntimeError("Google Drive not connected.")
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(sa_file, scopes=GDRIVE_SCOPES)
+        team = os.environ.get("GDRIVE_TEAM", "Data")
+        folder = os.environ.get("GDRIVE_FOLDER_ID", "")
 
-    creds = service_account.Credentials.from_service_account_file(
-        sa_file, scopes=["https://www.googleapis.com/auth/drive.readonly"]
-    )
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return build("drive", "v3", credentials=creds, cache_discovery=False), team, folder
+
+
+def sync_gdrive(progress_cb=None) -> dict:
+    """Sync Google Docs into ChromaDB (via OAuth on the user's Drive, or a service account)."""
+    service, team, folder = _gdrive_service_and_team()
 
     query = "mimeType='application/vnd.google-apps.document' and trashed=false"
     if folder:
