@@ -1,0 +1,21 @@
+name: Deploy to HF Spaces
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.email "ci@axis"
+          git config user.name "AXIS CI"
+          git push https://gokul1622:$HF_TOKEN@huggingface.co/spaces/gokul1622/axis-backend main --force
