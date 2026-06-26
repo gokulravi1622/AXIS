@@ -101,13 +101,18 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         },
         body: JSON.stringify({ target }),
       })
-      const { job_id } = await res.json()
+      const data = await res.json()
+      const job_id = data.job_id
+      if (!job_id) throw new Error(data.error || 'Sync did not return a job ID')
 
       // Poll job status until done or error
+      let pollCount = 0
       const poll = async () => {
+        if (pollCount++ > 120) return // safety: stop after 3 min of polling
         const statusRes = await fetch(`/api/sync/job/${job_id}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
+        if (!statusRes.ok) return // stop polling on unexpected errors
         const job = await statusRes.json()
         if (job.log?.length) setSyncLog(job.log)
         if (job.status === 'done') {
