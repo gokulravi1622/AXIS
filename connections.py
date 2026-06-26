@@ -20,7 +20,6 @@ PROVIDER_FIELDS = {
     "slack":      ["bot_token", "channels"],
     "notion":     ["token", "team"],
     "gdrive":     ["service_account_json", "team", "folder_id"],
-    "atlassian":  [],  # OAuth-only (Jira + Confluence)
 }
 PROVIDERS = list(PROVIDER_FIELDS.keys())
 
@@ -37,13 +36,29 @@ def _write_service_account(json_text: str) -> str:
 def apply_env(provider: str, config: dict) -> None:
     """Set the env vars sync.py expects from a stored connection config."""
     if provider in ("jira", "confluence"):
-        os.environ["JIRA_BASE_URL"] = config.get("base_url", "")
-        os.environ["JIRA_EMAIL"] = config.get("email", "")
-        os.environ["JIRA_API_TOKEN"] = config.get("api_token", "")
-        if provider == "jira":
-            os.environ["JIRA_PROJECTS"] = config.get("projects", "")
+        if config.get("refresh_token"):
+            # OAuth (Atlassian) mode — separate env per product so they don't collide
+            if config.get("site_url"):
+                os.environ["JIRA_BASE_URL"] = config["site_url"]
+            if provider == "jira":
+                os.environ["JIRA_OAUTH_REFRESH_TOKEN"] = config["refresh_token"]
+                os.environ["JIRA_OAUTH_CLOUD_ID"] = config.get("cloud_id", "")
+                os.environ["JIRA_OAUTH_TEAM"] = config.get("team", "Engineering")
+            else:
+                os.environ["CONFLUENCE_OAUTH_REFRESH_TOKEN"] = config["refresh_token"]
+                os.environ["CONFLUENCE_OAUTH_CLOUD_ID"] = config.get("cloud_id", "")
+                os.environ["CONFLUENCE_OAUTH_TEAM"] = config.get("team", "Engineering")
         else:
-            os.environ["CONFLUENCE_SPACES"] = config.get("spaces", "")
+            # Manual API-token mode (clear any stale OAuth discriminator first)
+            os.environ.pop("JIRA_OAUTH_REFRESH_TOKEN" if provider == "jira"
+                           else "CONFLUENCE_OAUTH_REFRESH_TOKEN", None)
+            os.environ["JIRA_BASE_URL"] = config.get("base_url", "")
+            os.environ["JIRA_EMAIL"] = config.get("email", "")
+            os.environ["JIRA_API_TOKEN"] = config.get("api_token", "")
+            if provider == "jira":
+                os.environ["JIRA_PROJECTS"] = config.get("projects", "")
+            else:
+                os.environ["CONFLUENCE_SPACES"] = config.get("spaces", "")
     elif provider == "slack":
         os.environ["SLACK_BOT_TOKEN"] = config.get("bot_token", "")
         os.environ["SLACK_CHANNELS"] = config.get("channels", "")
@@ -59,13 +74,6 @@ def apply_env(provider: str, config: dict) -> None:
         )
         os.environ["GDRIVE_TEAM"] = config.get("team", "Data")
         os.environ["GDRIVE_FOLDER_ID"] = config.get("folder_id", "")
-    elif provider == "atlassian":
-        os.environ["ATLASSIAN_REFRESH_TOKEN"] = config.get("refresh_token", "")
-        os.environ["ATLASSIAN_CLOUD_ID"] = config.get("cloud_id", "")
-        os.environ["ATLASSIAN_TEAM"] = config.get("team", "Engineering")
-        # browse/wiki citation URLs are built from the site URL
-        if config.get("site_url"):
-            os.environ["JIRA_BASE_URL"] = config["site_url"]
 
 
 def connection_teams(provider: str, config: dict) -> list[str]:
@@ -80,9 +88,9 @@ def connection_teams(provider: str, config: dict) -> list[str]:
     if provider == "slack":
         teams = [e.split("=", 1)[1].strip() for e in _split(config.get("channels", "")) if "=" in e]
         return list(dict.fromkeys(teams)) or [config.get("team", "Engineering")]
-    if provider == "atlassian":
-        return [config.get("team", "Engineering")]
     if provider in ("jira", "confluence"):
+        if config.get("refresh_token"):  # OAuth mode
+            return [config.get("team", "Engineering")]
         from sync import PROJECT_TO_TEAM, SPACE_TO_TEAM
         mapping = PROJECT_TO_TEAM if provider == "jira" else SPACE_TO_TEAM
         key = "projects" if provider == "jira" else "spaces"

@@ -53,13 +53,14 @@ def configured(provider: str) -> bool:
         return bool(NOTION_CLIENT_ID and NOTION_CLIENT_SECRET)
     if provider == "slack":
         return bool(SLACK_CLIENT_ID and SLACK_CLIENT_SECRET)
-    if provider == "atlassian":
+    # Jira and Confluence are both backed by one Atlassian OAuth app.
+    if provider in ("jira", "confluence"):
         return bool(ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET)
     return False
 
 
 def oauth_providers() -> list[str]:
-    return [p for p in ("notion", "slack", "atlassian") if configured(p)]
+    return [p for p in ("notion", "slack", "jira", "confluence") if configured(p)]
 
 
 # ── Generic dispatch (used by the /api/connect/{provider}/* endpoints) ─────────
@@ -68,7 +69,7 @@ def authorize_url(provider: str, state: str) -> str:
         return notion_authorize_url(state)
     if provider == "slack":
         return slack_authorize_url(state)
-    if provider == "atlassian":
+    if provider in ("jira", "confluence"):
         return atlassian_authorize_url(state)
     raise ValueError(f"No OAuth for provider: {provider}")
 
@@ -78,17 +79,17 @@ def exchange(provider: str, code: str) -> dict:
         return notion_exchange(code)
     if provider == "slack":
         return slack_exchange(code)
-    if provider == "atlassian":
+    if provider in ("jira", "confluence"):
         return atlassian_exchange(code)
     raise ValueError(f"No OAuth for provider: {provider}")
 
 
 # ── signed state (CSRF + carries user/org through the redirect) ────────────────
-def make_state(user_id: int, org_id: int) -> str:
-    return pyjwt.encode(
-        {"sub": str(user_id), "org": org_id, "typ": "oauth", "exp": int(time.time()) + 600},
-        JWT_SECRET, algorithm=JWT_ALGO,
-    )
+def make_state(user_id: int, org_id: int, prov: str | None = None) -> str:
+    payload = {"sub": str(user_id), "org": org_id, "typ": "oauth", "exp": int(time.time()) + 600}
+    if prov:
+        payload["prov"] = prov  # which connection to store under (jira/confluence share the atlassian callback)
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
 
 def read_state(state: str) -> dict | None:

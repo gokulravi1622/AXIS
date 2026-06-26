@@ -210,10 +210,12 @@ def _ticket_to_doc(issue: dict, project_key: str) -> dict:
 
 def sync_jira(progress_cb=None) -> dict:
     """
-    Sync all configured Jira projects into ChromaDB.
-    progress_cb(message: str) is called for status updates.
-    Returns {"synced": int, "projects": list}
+    Sync Jira into ChromaDB. Uses the Atlassian OAuth token if the org connected
+    via OAuth; otherwise falls back to the manual API-token + JIRA_PROJECTS config.
     """
+    if os.environ.get("JIRA_OAUTH_REFRESH_TOKEN"):
+        return _oauth_sync_jira(progress_cb)
+
     raw = os.environ.get("JIRA_PROJECTS", "")
     projects = [p.strip().upper() for p in raw.split(",") if p.strip()]
     if not projects:
@@ -311,9 +313,12 @@ def _page_to_doc(page: dict, space_key: str) -> dict:
 
 def sync_confluence(progress_cb=None) -> dict:
     """
-    Sync all configured Confluence spaces into ChromaDB.
-    Returns {"synced": int, "spaces": list}
+    Sync Confluence into ChromaDB. Uses the Atlassian OAuth token if the org
+    connected via OAuth; otherwise falls back to manual API-token + CONFLUENCE_SPACES.
     """
+    if os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"):
+        return _oauth_sync_confluence(progress_cb)
+
     raw = os.environ.get("CONFLUENCE_SPACES", "")
     spaces = [s.strip().upper() for s in raw.split(",") if s.strip()]
     if not spaces:
@@ -744,41 +749,36 @@ def sync_gdrive(progress_cb=None) -> dict:
     return {"synced": len(ids)}
 
 
-# ── Atlassian (Jira + Confluence) via OAuth ───────────────────────────────────
+# ── Atlassian OAuth (powers Jira and Confluence separately) ───────────────────
 #
-# One OAuth connection grants both. Access tokens are short-lived, so we mint a
-# fresh one from the stored refresh token on each sync (persisting the rotated
-# refresh token back to the org's connection). API calls use Bearer auth against
-# api.atlassian.com/ex/{jira,confluence}/{cloudId}.
+# Jira and Confluence each have their own connection but share one Atlassian OAuth
+# app. Access tokens are short-lived, so we mint a fresh one from the stored refresh
+# token on each sync (persisting a rotated refresh token back). API calls use Bearer
+# auth against api.atlassian.com/ex/{jira,confluence}/{cloudId}.
 
-def _atlassian_access_token() -> tuple[str, str]:
-    refresh = os.environ.get("ATLASSIAN_REFRESH_TOKEN")
-    cloud_id = os.environ.get("ATLASSIAN_CLOUD_ID")
-    if not (refresh and cloud_id):
-        raise RuntimeError("Atlassian not connected.")
+def _atlassian_token(refresh_token: str, cloud_id: str, provider: str, org_id) -> str:
+    if not (refresh_token and cloud_id):
+        raise RuntimeError(f"{provider} (Atlassian) not connected.")
     resp = requests.post(
         "https://auth.atlassian.com/oauth/token",
         json={"grant_type": "refresh_token",
               "client_id": os.environ.get("ATLASSIAN_OAUTH_CLIENT_ID"),
               "client_secret": os.environ.get("ATLASSIAN_OAUTH_CLIENT_SECRET"),
-              "refresh_token": refresh},
+              "refresh_token": refresh_token},
         timeout=15,
     )
     resp.raise_for_status()
     data = resp.json()
-    new_refresh = data.get("refresh_token", refresh)
-    # Persist a rotated refresh token so the next sync still works.
-    org_id = os.environ.get("ATLASSIAN_ORG_ID")
-    if org_id and new_refresh and new_refresh != refresh:
+    new_refresh = data.get("refresh_token", refresh_token)
+    if org_id and new_refresh and new_refresh != refresh_token:
         try:
             from db import upsert_connection, get_connection_config
-            cfg = get_connection_config(int(org_id), "atlassian") or {}
+            cfg = get_connection_config(int(org_id), provider) or {}
             cfg["refresh_token"] = new_refresh
-            upsert_connection(int(org_id), "atlassian", cfg, connected=True)
-            os.environ["ATLASSIAN_REFRESH_TOKEN"] = new_refresh
+            upsert_connection(int(org_id), provider, cfg, connected=True)
         except Exception:
             pass
-    return data["access_token"], cloud_id
+    return data["access_token"]
 
 
 def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
@@ -789,21 +789,19 @@ def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
     return resp.json()
 
 
-def sync_atlassian(progress_cb=None) -> dict:
-    """Sync Jira issues + Confluence pages via an Atlassian OAuth connection."""
-    access, cloud_id = _atlassian_access_token()
-    jira_base = f"https://api.atlassian.com/ex/jira/{cloud_id}"
-    conf_base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
+def _oauth_sync_jira(progress_cb=None) -> dict:
+    """Sync all accessible Jira issues via the org's Atlassian OAuth token."""
+    cloud_id = os.environ.get("JIRA_OAUTH_CLOUD_ID")
+    access = _atlassian_token(os.environ.get("JIRA_OAUTH_REFRESH_TOKEN"), cloud_id,
+                              "jira", os.environ.get("JIRA_OAUTH_ORG_ID"))
+    base = f"https://api.atlassian.com/ex/jira/{cloud_id}"
     collection = _get_collection()
-    total = 0
-
-    # Jira — all accessible issues, newest first
-    if progress_cb:
-        progress_cb("Fetching Jira issues (Atlassian OAuth)…")
     ids, documents, metadatas = [], [], []
+    if progress_cb:
+        progress_cb("Fetching Jira issues (OAuth)…")
     start = 0
     while True:
-        data = _atlassian_get(jira_base, "/rest/api/3/search/jql", access, {
+        data = _atlassian_get(base, "/rest/api/3/search/jql", access, {
             "jql": "ORDER BY updated DESC", "startAt": start, "maxResults": 50,
             "fields": "summary,description,status,assignee,priority,labels,comment,updated,project",
         })
@@ -822,17 +820,24 @@ def sync_atlassian(progress_cb=None) -> dict:
             break
     if ids:
         _upsert_batch(collection, ids, documents, metadatas)
-        total += len(ids)
         if progress_cb:
             progress_cb(f"  ✓ {len(ids)} Jira issue(s) synced")
+    return {"synced": len(ids), "projects": ["oauth"]}
 
-    # Confluence — current pages
-    if progress_cb:
-        progress_cb("Fetching Confluence pages (Atlassian OAuth)…")
+
+def _oauth_sync_confluence(progress_cb=None) -> dict:
+    """Sync all accessible Confluence pages via the org's Atlassian OAuth token."""
+    cloud_id = os.environ.get("CONFLUENCE_OAUTH_CLOUD_ID")
+    access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
+                              "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
+    base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
+    collection = _get_collection()
     ids, documents, metadatas = [], [], []
+    if progress_cb:
+        progress_cb("Fetching Confluence pages (OAuth)…")
     start = 0
     while True:
-        data = _atlassian_get(conf_base, "/wiki/rest/api/content", access, {
+        data = _atlassian_get(base, "/wiki/rest/api/content", access, {
             "type": "page", "status": "current", "start": start, "limit": 50,
             "expand": "body.storage,version,space",
         })
@@ -851,18 +856,16 @@ def sync_atlassian(progress_cb=None) -> dict:
             break
     if ids:
         _upsert_batch(collection, ids, documents, metadatas)
-        total += len(ids)
         if progress_cb:
             progress_cb(f"  ✓ {len(ids)} Confluence page(s) synced")
-
-    return {"synced": total}
+    return {"synced": len(ids), "spaces": ["oauth"]}
 
 
 # ── Full sync ─────────────────────────────────────────────────────────────────
 
 def sync_all(progress_cb=None) -> dict:
     results = {"jira": None, "confluence": None, "slack": None,
-               "notion": None, "gdrive": None, "atlassian": None, "errors": []}
+               "notion": None, "gdrive": None, "errors": []}
 
     steps = [
         ("jira", "Jira", sync_jira),
@@ -870,7 +873,6 @@ def sync_all(progress_cb=None) -> dict:
         ("slack", "Slack", sync_slack),
         ("notion", "Notion", sync_notion),
         ("gdrive", "Google Drive", sync_gdrive),
-        ("atlassian", "Atlassian", sync_atlassian),
     ]
     for key, label, fn in steps:
         try:

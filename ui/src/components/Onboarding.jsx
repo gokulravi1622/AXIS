@@ -38,11 +38,6 @@ const PROVIDERS = {
       { key: 'team', label: 'File under team', placeholder: 'Product' },
     ],
   },
-  atlassian: {
-    label: 'Atlassian (Jira & Confluence)', color: '#2684FF',
-    help: 'One click connects both Jira and Confluence — projects and spaces are discovered automatically.',
-    fields: [],
-  },
   gdrive: {
     label: 'Google Drive', color: 'var(--c-crm)',
     help: 'Create a GCP service account, enable the Drive API, download its JSON key, and share your Docs/folder with the service-account email.',
@@ -54,7 +49,7 @@ const PROVIDERS = {
   },
 }
 
-const ORDER = ['atlassian', 'jira', 'confluence', 'slack', 'notion', 'gdrive']
+const ORDER = ['jira', 'confluence', 'slack', 'notion', 'gdrive']
 
 export default function Onboarding({ token, orgName, onComplete }) {
   const [step, setStep] = useState('select')          // 'select' | 'connect'

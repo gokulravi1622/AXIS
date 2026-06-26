@@ -14,7 +14,7 @@ from typing import Optional
 
 from query import ask
 from contribute import submit_context, get_doc_count
-from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_atlassian, sync_all
+from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -251,7 +251,7 @@ def oauth_start(provider: str, token: str):
         raise HTTPException(status_code=401, detail="Not authenticated.")
     if not oauth.configured(provider):
         raise HTTPException(status_code=400, detail=f"{provider} OAuth is not configured on the server.")
-    state = oauth.make_state(user["id"], user["org_id"])
+    state = oauth.make_state(user["id"], user["org_id"], provider)
     return RedirectResponse(oauth.authorize_url(provider, state))
 
 
@@ -265,12 +265,14 @@ def oauth_callback(provider: str, code: Optional[str] = None, state: Optional[st
     st = oauth.read_state(state) if state else None
     if error or not code or not st:
         return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={provider}")
+    # jira/confluence share the atlassian callback — the real target is carried in state
+    target = st.get("prov", provider)
     try:
-        config = oauth.exchange(provider, code)
-        upsert_connection(st["org"], provider, config, connected=True)
+        config = oauth.exchange(target, code)
+        upsert_connection(st["org"], target, config, connected=True)
     except Exception:
-        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={provider}")
-    return RedirectResponse(f"{oauth.FRONTEND_URL}/?connected={provider}")
+        return RedirectResponse(f"{oauth.FRONTEND_URL}/?connect_error={target}")
+    return RedirectResponse(f"{oauth.FRONTEND_URL}/?connected={target}")
 
 
 @app.post("/api/connections/test")
@@ -409,9 +411,11 @@ def _apply_org_connections(org_id, target):
         cfg = get_connection_config(org_id, provider)
         if cfg:
             conn_helpers.apply_env(provider, cfg)
-            if provider == "atlassian":
-                # so the token-refresh can persist a rotated refresh token
-                os.environ["ATLASSIAN_ORG_ID"] = str(org_id)
+            # so the OAuth token-refresh can persist a rotated refresh token
+            if provider == "jira" and cfg.get("refresh_token"):
+                os.environ["JIRA_OAUTH_ORG_ID"] = str(org_id)
+            if provider == "confluence" and cfg.get("refresh_token"):
+                os.environ["CONFLUENCE_OAUTH_ORG_ID"] = str(org_id)
 
 
 @app.post("/api/sync")
@@ -437,9 +441,6 @@ def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user))
         elif req.target == "gdrive":
             res = sync_gdrive(progress_cb=log.append)
             return {"gdrive": res["synced"], "log": log}
-        elif req.target == "atlassian":
-            res = sync_atlassian(progress_cb=log.append)
-            return {"atlassian": res["synced"], "log": log}
         else:
             res = sync_all(progress_cb=log.append)
             return {
@@ -448,7 +449,6 @@ def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user))
                 "slack": res["slack"]["synced"] if res["slack"] else None,
                 "notion": res["notion"]["synced"] if res["notion"] else None,
                 "gdrive": res["gdrive"]["synced"] if res["gdrive"] else None,
-                "atlassian": res["atlassian"]["synced"] if res["atlassian"] else None,
                 "errors": res.get("errors", []),
                 "log": log,
             }
