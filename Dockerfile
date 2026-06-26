@@ -4,7 +4,9 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/app/.cache/hf \
     SENTENCE_TRANSFORMERS_HOME=/app/.cache/st \
-    PORT=8000
+    PORT=8000 \
+    AXIS_DB_FILE=/data/axis.db \
+    AXIS_DB_DIR=/data/axis_db
 
 WORKDIR /app
 

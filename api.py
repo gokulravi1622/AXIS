@@ -555,13 +555,27 @@ async def _run_sync_job(job_id: str, target: str, org_id=None):
 @app.post("/api/sync")
 async def do_sync(req: SyncRequest, user: Optional[dict] = Depends(get_optional_user)):
     """Start a background sync job; returns job_id immediately."""
+    org_id = user.get("org_id") if user else None
+
+    # Require authentication — anonymous callers can't have connections
+    if not org_id:
+        raise HTTPException(status_code=401, detail="Sign in to sync your connected tools.")
+
+    # Check that the org has at least one active connection
+    conns = list_connections(org_id)
+    active = [c for c in conns if c.get("connected")]
+    if not active:
+        raise HTTPException(
+            status_code=400,
+            detail="No tools connected. Open Settings → Connections to add Jira, Confluence, Slack, Notion, or Drive.",
+        )
+
     job_id = str(uuid.uuid4())[:8]
     _sync_jobs[job_id] = {
         "id": job_id, "target": req.target, "status": "queued",
         "log": [], "result": None, "error": None,
         "started_at": datetime.utcnow().isoformat() + "Z", "finished_at": None,
     }
-    org_id = user.get("org_id") if user else None
     asyncio.create_task(_run_sync_job(job_id, req.target, org_id))
     return {"job_id": job_id, "status": "queued"}
 

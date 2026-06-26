@@ -103,7 +103,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
       })
       const data = await res.json()
       const job_id = data.job_id
-      if (!job_id) throw new Error(data.error || 'Sync did not return a job ID')
+      if (!job_id) throw new Error(data.detail || data.error || 'Sync did not return a job ID')
 
       // Poll job status until done or error
       let pollCount = 0
@@ -137,10 +137,11 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         }
       }
       setTimeout(poll, 800)
-    } catch {
-      setSyncResults(prev => ({ ...prev, [target]: { error: 'Sync failed' } }))
+    } catch (err) {
+      const msg = err?.message || 'Sync failed'
+      setSyncResults(prev => ({ ...prev, [target]: { error: msg } }))
       setSyncLoading(prev => ({ ...prev, [target]: false }))
-      if (addToast) addToast({ type: 'error', message: `${target} sync failed`, timestamp: new Date().toISOString() })
+      if (addToast) addToast({ type: 'error', message: msg, timestamp: new Date().toISOString() })
     }
   }
 

@@ -15,7 +15,7 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
 
-DB_PATH = Path("axis.db")
+DB_PATH = Path(os.environ.get("AXIS_DB_FILE", "axis.db"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
 USE_PG = bool(DATABASE_URL and DATABASE_URL.startswith(("postgres://", "postgresql://")))
 
