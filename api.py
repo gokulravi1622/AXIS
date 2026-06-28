@@ -99,9 +99,18 @@ def _ensure_seeded():
 
 @app.on_event("startup")
 async def on_startup():
-    init_db()
-    _ensure_seeded()
-    start_scheduler()
+    try:
+        init_db()
+    except Exception as e:
+        logger.error(f'"DB init failed at startup" error="{e}"')
+    try:
+        _ensure_seeded()
+    except Exception as e:
+        logger.error(f'"Seed ingest failed at startup" error="{e}"')
+    try:
+        start_scheduler()
+    except Exception as e:
+        logger.error(f'"Scheduler start failed" error="{e}"')
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

@@ -60,7 +60,10 @@ class _Conn:
 def get_conn() -> _Conn:
     """Open a new connection (one per request keeps things thread-safe under FastAPI)."""
     if USE_PG:
-        return _Conn(psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=15))
+        import re
+        # Strip channel_binding param — not supported by all psycopg builds
+        url = re.sub(r"[?&]channel_binding=[^&]*", "", DATABASE_URL)
+        return _Conn(psycopg.connect(url, row_factory=dict_row, connect_timeout=15))
     raw = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     raw.row_factory = sqlite3.Row
     raw.execute("PRAGMA foreign_keys = ON")
