@@ -816,6 +816,14 @@ def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
             detail = resp.json()
         except Exception:
             detail = resp.text[:300]
+        # Surface actionable Atlassian-specific errors
+        if resp.status_code == 403:
+            msg = detail.get("message", "") if isinstance(detail, dict) else str(detail)
+            if "not permitted to use Confluence" in msg:
+                raise RuntimeError(
+                    "Your Atlassian account doesn't have a Confluence subscription on this site. "
+                    "Go to your Atlassian admin and add Confluence to your site, then reconnect."
+                )
         raise requests.HTTPError(
             f"{resp.status_code} {resp.reason} — {detail}", response=resp
         )
@@ -832,12 +840,16 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
     ids, documents, metadatas = [], [], []
     if progress_cb:
         progress_cb("Fetching Jira issues (OAuth)…")
-    start = 0
+    # /search/jql uses cursor-based pagination (nextPageToken), not offset startAt
+    next_token = None
     while True:
-        data = _atlassian_get(base, "/rest/api/3/search", access, {
-            "jql": "ORDER BY updated DESC", "startAt": start, "maxResults": 50,
+        params = {
+            "jql": "ORDER BY updated DESC", "maxResults": 50,
             "fields": "summary,description,status,assignee,priority,labels,comment,updated,project",
-        })
+        }
+        if next_token:
+            params["nextPageToken"] = next_token
+        data = _atlassian_get(base, "/rest/api/3/search/jql", access, params)
         issues = data.get("issues", [])
         if not issues:
             break
@@ -848,8 +860,8 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
             ids.append(doc["id"]); documents.append(chunk)
             metadatas.append({"team": doc["team"], "title": doc["title"],
                               "tags": ", ".join(doc["tags"]), "source": "jira", "url": doc["url"]})
-        start += len(issues)
-        if start >= data.get("total", 0):
+        next_token = data.get("nextPageToken")
+        if not next_token or data.get("isLast", False):
             break
     if ids:
         _upsert_batch(collection, ids, documents, metadatas)
@@ -863,10 +875,8 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
     cloud_id = os.environ.get("CONFLUENCE_OAUTH_CLOUD_ID")
     access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
-    # Prefer the direct site URL — the API gateway (/ex/confluence/{id}) can 401
-    # even with a valid token; the site URL is more reliable for REST API calls.
-    site_url = os.environ.get("CONFLUENCE_SITE_URL", "").rstrip("/")
-    base = site_url if site_url else f"https://api.atlassian.com/ex/confluence/{cloud_id}"
+    # OAuth 2.0 (3LO) tokens MUST use the API gateway — they don't work with direct site URLs
+    base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
     collection = _get_collection()
     ids, documents, metadatas = [], [], []
     if progress_cb:
