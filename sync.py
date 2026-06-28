@@ -777,14 +777,22 @@ def sync_gdrive(progress_cb=None) -> dict:
 def _atlassian_token(refresh_token: str, cloud_id: str, provider: str, org_id) -> str:
     if not (refresh_token and cloud_id):
         raise RuntimeError(f"{provider} (Atlassian) not connected.")
+    client_id = os.environ.get("ATLASSIAN_OAUTH_CLIENT_ID")
+    client_secret = os.environ.get("ATLASSIAN_OAUTH_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        raise RuntimeError("Atlassian OAuth app not configured on this server.")
     resp = requests.post(
         "https://auth.atlassian.com/oauth/token",
         json={"grant_type": "refresh_token",
-              "client_id": os.environ.get("ATLASSIAN_OAUTH_CLIENT_ID"),
-              "client_secret": os.environ.get("ATLASSIAN_OAUTH_CLIENT_SECRET"),
+              "client_id": client_id,
+              "client_secret": client_secret,
               "refresh_token": refresh_token},
         timeout=15,
     )
+    if resp.status_code == 403:
+        raise RuntimeError(
+            f"{provider.title()} authorization expired — go to Settings → Connections and reconnect."
+        )
     resp.raise_for_status()
     data = resp.json()
     new_refresh = data.get("refresh_token", refresh_token)
