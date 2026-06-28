@@ -1,3 +1,12 @@
+---
+title: AXIS Backend
+emoji: 🧠
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # AXIS — Centralized Knowledge Layer
 
 > One source of truth. Every team's context, in one place.
