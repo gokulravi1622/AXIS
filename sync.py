@@ -811,7 +811,14 @@ def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
     resp = requests.get(f"{base}{path}",
                         headers={"Authorization": f"Bearer {access}", "Accept": "application/json"},
                         params=params, timeout=20)
-    resp.raise_for_status()
+    if not resp.ok:
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text[:300]
+        raise requests.HTTPError(
+            f"{resp.status_code} {resp.reason} — {detail}", response=resp
+        )
     return resp.json()
 
 
@@ -827,7 +834,7 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
         progress_cb("Fetching Jira issues (OAuth)…")
     start = 0
     while True:
-        data = _atlassian_get(base, "/rest/api/3/search/jql", access, {
+        data = _atlassian_get(base, "/rest/api/3/search", access, {
             "jql": "ORDER BY updated DESC", "startAt": start, "maxResults": 50,
             "fields": "summary,description,status,assignee,priority,labels,comment,updated,project",
         })
@@ -856,7 +863,10 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
     cloud_id = os.environ.get("CONFLUENCE_OAUTH_CLOUD_ID")
     access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
-    base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
+    # Prefer the direct site URL — the API gateway (/ex/confluence/{id}) can 401
+    # even with a valid token; the site URL is more reliable for REST API calls.
+    site_url = os.environ.get("CONFLUENCE_SITE_URL", "").rstrip("/")
+    base = site_url if site_url else f"https://api.atlassian.com/ex/confluence/{cloud_id}"
     collection = _get_collection()
     ids, documents, metadatas = [], [], []
     if progress_cb:
