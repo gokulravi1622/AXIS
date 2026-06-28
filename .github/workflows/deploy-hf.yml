@@ -13,8 +13,10 @@ jobs:
           fetch-depth: 0
 
       - name: Push to Hugging Face Spaces
+        timeout-minutes: 30
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GIT_HTTP_TIMEOUT: "1800"
         run: |
           git config user.email "ci@axis"
           git config user.name "AXIS CI"
