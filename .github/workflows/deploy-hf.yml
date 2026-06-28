@@ -9,10 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Push to Hugging Face Spaces
+      - name: Push backend-only to Hugging Face Spaces
         timeout-minutes: 30
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -20,4 +18,22 @@ jobs:
         run: |
           git config user.email "ci@axis"
           git config user.name "AXIS CI"
-          git push https://gokul1622:$HF_TOKEN@huggingface.co/spaces/gokul1622/axis-backend main --force
+
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+
+          # Create an orphan branch so we push a single clean commit
+          # with only backend files — no ui/, no binary blobs, no history.
+          git checkout --orphan hf-deploy
+
+          # Drop frontend, CI, and local tooling — HF only needs the Python backend
+          git rm -rf ui/ .github/ .claude/ --ignore-unmatch
+
+          # Drop any remaining binary files that HF would reject
+          find . -maxdepth 3 \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \
+               -o -name "*.gif" -o -name "*.ico" -o -name "*.webp" \) \
+               -not -path "./.git/*" | xargs git rm -f --ignore-unmatch 2>/dev/null || true
+
+          git add -A
+          git commit -m "backend snapshot ${COMMIT_SHA}"
+
+          git push https://gokul1622:$HF_TOKEN@huggingface.co/spaces/gokul1622/axis-backend hf-deploy:main --force
