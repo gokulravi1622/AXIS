@@ -1,6 +1,2 @@
-*.webp filter=lfs diff=lfs merge=lfs -text
-*.png filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
-*.jpeg filter=lfs diff=lfs merge=lfs -text
-*.gif filter=lfs diff=lfs merge=lfs -text
-*.ico filter=lfs diff=lfs merge=lfs -text
+# No LFS needed — HF workflow strips ui/ before pushing, so binary images
+# never reach HF. Keeping images as regular git objects so Vercel serves them.
