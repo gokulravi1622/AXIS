@@ -20,4 +20,8 @@ jobs:
         run: |
           git config user.email "ci@axis"
           git config user.name "AXIS CI"
-          git push https://gokul1622:$HF_TOKEN@huggingface.co/spaces/gokul1622/axis-backend main --force
+          if git ls-files --error-unmatch ui/public/axis-logo.png >/dev/null 2>&1; then
+            git rm -f ui/public/axis-logo.png
+            git commit -m "ci: remove binary asset for HF deploy"
+          fi
+          git push https://gokul1622:$HF_TOKEN@huggingface.co/spaces/gokul1622/axis-backend HEAD:main --force
