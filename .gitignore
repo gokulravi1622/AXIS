@@ -42,3 +42,4 @@ sentence_transformers/
 
 # Claude Code local settings (may contain command history/secrets)
 .claude/settings.local.json
+ui/public/Screenshot*
