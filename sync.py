@@ -287,6 +287,29 @@ def _fetch_confluence_pages(space_key: str) -> Generator[dict, None, None]:
             break
 
 
+def _page_to_doc_v2(page: dict, space_key: str) -> dict:
+    """Parse a Confluence REST API v2 page object into an AXIS doc."""
+    title = page.get("title", "")
+    page_id = str(page.get("id", ""))
+    # v2 body: {"storage": {"representation": "storage", "value": "<html>"}}
+    body_html = (page.get("body") or {}).get("storage", {}).get("value", "")
+    content = _strip_html(body_html)
+    if len(content) > 3000:
+        content = content[:3000] + "…"
+    team = SPACE_TO_TEAM.get(space_key.upper(), space_key or "Engineering")
+    webui = (page.get("_links") or {}).get("webui", "")
+    base = _base_url()
+    url = f"{base}/wiki{webui}" if (base and webui) else ""
+    return {
+        "id": _doc_id("conf", page_id),
+        "team": team,
+        "title": title,
+        "content": content or "(no content)",
+        "tags": ["confluence", space_key.lower()],
+        "url": url,
+    }
+
+
 def _page_to_doc(page: dict, space_key: str) -> dict:
     title = page.get("title", "")
     page_id = page.get("id", "")
@@ -911,17 +934,13 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
 
 
 def _oauth_sync_confluence(progress_cb=None) -> dict:
-    """Sync all accessible Confluence pages via the org's Atlassian OAuth token."""
+    """Sync all accessible Confluence pages via the org's Atlassian OAuth token.
+
+    Uses Confluence REST API v2 (/wiki/api/v2/pages) — the v1 endpoint at the
+    API gateway rejects classic OAuth scopes with 401 'scope does not match',
+    while v2 correctly handles the classic→granular scope mapping.
+    """
     cloud_id = os.environ.get("CONFLUENCE_OAUTH_CLOUD_ID")
-    # Early check: if stored scopes don't include Confluence, give a clear error before
-    # hitting the API (avoids a cryptic 403 when the OAuth app lacks Confluence permissions)
-    granted = os.environ.get("CONFLUENCE_OAUTH_GRANTED_SCOPES", "")
-    if granted and "read:confluence-content.all" not in granted:
-        raise RuntimeError(
-            "The Atlassian OAuth app is missing Confluence API permissions. "
-            "Go to developer.atlassian.com → your AXIS app → Permissions → "
-            "add 'Confluence API' with read:confluence-content.all scope, then reconnect Confluence."
-        )
     access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
     # Re-resolve cloud_id from live token — stored value may be the Jira cloud_id if
@@ -929,31 +948,64 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
     resolved = _atlassian_cloud_id_for(access, "confluence")
     if resolved:
         cloud_id = resolved
-    # OAuth 2.0 (3LO) tokens MUST use the API gateway — they don't work with direct site URLs
     base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
     collection = _get_collection()
     ids, documents, metadatas = [], [], []
     if progress_cb:
-        progress_cb("Fetching Confluence pages (OAuth)…")
-    start = 0
+        progress_cb("Fetching Confluence spaces (OAuth)…")
+
+    # Build space_id → space_key mapping so we can resolve AXIS teams.
+    space_key_map: dict[str, str] = {}
+    try:
+        sp_cursor = None
+        while True:
+            sp_params: dict = {"limit": 50}
+            if sp_cursor:
+                sp_params["cursor"] = sp_cursor
+            sp_data = _atlassian_get(base, "/wiki/api/v2/spaces", access, sp_params)
+            for sp in sp_data.get("results", []):
+                space_key_map[sp["id"]] = sp.get("key", "")
+            nxt = sp_data.get("_links", {}).get("next", "")
+            if not nxt:
+                break
+            from urllib.parse import urlparse, parse_qs
+            sp_cursor = parse_qs(urlparse(nxt).query).get("cursor", [None])[0]
+            if not sp_cursor:
+                break
+    except Exception as e:
+        logger.warning(f'"Confluence space list failed, team mapping will be empty" error="{e}"')
+
+    if progress_cb:
+        progress_cb(f"Found {len(space_key_map)} space(s). Fetching pages…")
+
+    # Fetch all pages using cursor-based pagination (v2 REST API).
+    cursor = None
     while True:
-        data = _atlassian_get(base, "/wiki/rest/api/content", access, {
-            "type": "page", "status": "current", "start": start, "limit": 50,
-            "expand": "body.storage,version,space",
-        })
+        params: dict = {"limit": 50, "body-format": "storage"}
+        if cursor:
+            params["cursor"] = cursor
+        data = _atlassian_get(base, "/wiki/api/v2/pages", access, params)
         pages = data.get("results", [])
         if not pages:
             break
         for page in pages:
-            space_key = (page.get("space") or {}).get("key", "")
-            doc = _page_to_doc(page, space_key)
+            space_id = page.get("spaceId", "")
+            space_key = space_key_map.get(space_id, "")
+            doc = _page_to_doc_v2(page, space_key)
             chunk = f"Team: {doc['team']}\nTitle: {doc['title']}\n\n{doc['content']}"
-            ids.append(doc["id"]); documents.append(chunk)
+            ids.append(doc["id"])
+            documents.append(chunk)
             metadatas.append({"team": doc["team"], "title": doc["title"],
-                              "tags": ", ".join(doc["tags"]), "source": "confluence", "url": doc["url"]})
-        start += len(pages)
-        if start >= data.get("size", 0) and len(pages) < 50:
+                              "tags": ", ".join(doc["tags"]), "source": "confluence",
+                              "url": doc["url"]})
+        nxt = data.get("_links", {}).get("next", "")
+        if not nxt:
             break
+        from urllib.parse import urlparse, parse_qs
+        cursor = parse_qs(urlparse(nxt).query).get("cursor", [None])[0]
+        if not cursor:
+            break
+
     if ids:
         _upsert_batch(collection, ids, documents, metadatas)
         if progress_cb:
