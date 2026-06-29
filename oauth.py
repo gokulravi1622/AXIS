@@ -44,8 +44,12 @@ ATLASSIAN_REDIRECT_URI = os.environ.get(
     "ATLASSIAN_REDIRECT_URI", "http://localhost:8000/api/connect/atlassian/callback"
 )
 ATLASSIAN_DEFAULT_TEAM = os.environ.get("ATLASSIAN_DEFAULT_TEAM", "Engineering")
-ATLASSIAN_SCOPES = ("read:jira-work read:jira-user read:confluence-content.all "
-                    "read:confluence-space.summary offline_access")
+# Confluence uses granular scopes (read:content:confluence) — the classic scope
+# (read:confluence-content.all) is rejected by the Confluence REST API gateway.
+# Jira keeps classic scopes as they still work fine.
+ATLASSIAN_SCOPES = ("read:jira-work read:jira-user "
+                    "read:content:confluence "
+                    "offline_access")
 
 
 # ── Google Drive ──────────────────────────────────────────────────────────────

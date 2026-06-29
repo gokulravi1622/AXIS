@@ -287,16 +287,16 @@ def _fetch_confluence_pages(space_key: str) -> Generator[dict, None, None]:
             break
 
 
-def _page_to_doc_v2(page: dict, space_key: str) -> dict:
+def _page_to_doc_v2(page: dict, space_key: str, team: str = "Engineering") -> dict:
     """Parse a Confluence REST API v2 page object into an AXIS doc."""
     title = page.get("title", "")
     page_id = str(page.get("id", ""))
-    # v2 body: {"storage": {"representation": "storage", "value": "<html>"}}
     body_html = (page.get("body") or {}).get("storage", {}).get("value", "")
     content = _strip_html(body_html)
     if len(content) > 3000:
         content = content[:3000] + "…"
-    team = SPACE_TO_TEAM.get(space_key.upper(), space_key or "Engineering")
+    if space_key:
+        team = SPACE_TO_TEAM.get(space_key.upper(), team)
     webui = (page.get("_links") or {}).get("webui", "")
     base = _base_url()
     url = f"{base}/wiki{webui}" if (base and webui) else ""
@@ -808,7 +808,10 @@ def _atlassian_cloud_id_for(access_token: str, product: str) -> str:
     the right ID — the value stored at connect time may be wrong if the user connected
     before a code fix was deployed.
     """
-    scope_map = {"jira": "read:jira-work", "confluence": "read:confluence-content.all"}
+    # Accept either classic or granular Confluence scope — token may have either depending on
+    # when the user connected vs when the OAuth app was migrated to granular scopes.
+    scope_map = {"jira": "read:jira-work",
+                 "confluence": "read:content:confluence"}
     required = scope_map.get(product, "")
     try:
         res = requests.get(
@@ -821,7 +824,13 @@ def _atlassian_cloud_id_for(access_token: str, product: str) -> str:
             return ""
         sites = res.json()
         logger.info(f'"accessible-resources" product="{product}" sites={[{"id": s["id"][:8]+"...", "scopes": s.get("scopes", [])} for s in sites]}')
-        site = next((s for s in sites if required in s.get("scopes", [])), None) or (sites[0] if sites else None)
+        # Accept classic OR granular Confluence scope
+        confluece_scopes = {"read:content:confluence", "read:confluence-content.all"}
+        if required in confluece_scopes:
+            site = next((s for s in sites if confluece_scopes & set(s.get("scopes", []))), None)
+        else:
+            site = next((s for s in sites if required in s.get("scopes", [])), None)
+        site = site or (sites[0] if sites else None)
         if site:
             logger.info(f'"resolved cloud_id" product="{product}" cloud_id="{site["id"][:8]}..." matched_scope="{required in site.get("scopes", [])}"')
         return site["id"] if site else ""
@@ -951,34 +960,15 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
     base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
     collection = _get_collection()
     ids, documents, metadatas = [], [], []
-    if progress_cb:
-        progress_cb("Fetching Confluence spaces (OAuth)…")
-
-    # Build space_id → space_key mapping so we can resolve AXIS teams.
-    space_key_map: dict[str, str] = {}
-    try:
-        sp_cursor = None
-        while True:
-            sp_params: dict = {"limit": 50}
-            if sp_cursor:
-                sp_params["cursor"] = sp_cursor
-            sp_data = _atlassian_get(base, "/wiki/api/v2/spaces", access, sp_params)
-            for sp in sp_data.get("results", []):
-                space_key_map[sp["id"]] = sp.get("key", "")
-            nxt = sp_data.get("_links", {}).get("next", "")
-            if not nxt:
-                break
-            from urllib.parse import urlparse, parse_qs
-            sp_cursor = parse_qs(urlparse(nxt).query).get("cursor", [None])[0]
-            if not sp_cursor:
-                break
-    except Exception as e:
-        logger.warning(f'"Confluence space list failed, team mapping will be empty" error="{e}"')
+    # Team for all Confluence pages — set when the user connected Confluence.
+    # We skip the /wiki/api/v2/spaces call because it requires read:space:confluence
+    # which is a separate scope not currently granted.
+    default_team = os.environ.get("CONFLUENCE_OAUTH_TEAM", "Engineering")
 
     if progress_cb:
-        progress_cb(f"Found {len(space_key_map)} space(s). Fetching pages…")
+        progress_cb("Fetching Confluence pages (OAuth v2)…")
 
-    # Fetch all pages using cursor-based pagination (v2 REST API).
+    # Fetch all pages using cursor-based pagination (Confluence REST API v2).
     cursor = None
     while True:
         params: dict = {"limit": 50, "body-format": "storage"}
@@ -989,9 +979,7 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
         if not pages:
             break
         for page in pages:
-            space_id = page.get("spaceId", "")
-            space_key = space_key_map.get(space_id, "")
-            doc = _page_to_doc_v2(page, space_key)
+            doc = _page_to_doc_v2(page, "", default_team)
             chunk = f"Team: {doc['team']}\nTitle: {doc['title']}\n\n{doc['content']}"
             ids.append(doc["id"])
             documents.append(chunk)
