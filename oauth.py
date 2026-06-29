@@ -204,11 +204,13 @@ def atlassian_exchange(code: str) -> dict:
     if not sites:
         raise RuntimeError("No Atlassian sites accessible for this account.")
     site = sites[0]
+    granted_scopes = set(site.get("scopes", []))
     return {
         "refresh_token": tok["refresh_token"],
         "cloud_id": site["id"],
         "site_url": site.get("url", ""),
         "team": ATLASSIAN_DEFAULT_TEAM,
+        "granted_scopes": list(granted_scopes),
     }
 
 

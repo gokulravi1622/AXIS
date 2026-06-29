@@ -821,8 +821,10 @@ def _atlassian_get(base: str, path: str, access: str, params: dict) -> dict:
             msg = detail.get("message", "") if isinstance(detail, dict) else str(detail)
             if "not permitted to use Confluence" in msg:
                 raise RuntimeError(
-                    "Your Atlassian account doesn't have a Confluence subscription on this site. "
-                    "Go to your Atlassian admin and add Confluence to your site, then reconnect."
+                    "Confluence API access denied. Most likely the Atlassian OAuth app is missing "
+                    "Confluence API permissions. Go to developer.atlassian.com → your AXIS app → "
+                    "Permissions → add Confluence API (read:confluence-content.all), then "
+                    "reconnect Confluence in AXIS Settings."
                 )
         raise requests.HTTPError(
             f"{resp.status_code} {resp.reason} — {detail}", response=resp
@@ -873,6 +875,15 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
 def _oauth_sync_confluence(progress_cb=None) -> dict:
     """Sync all accessible Confluence pages via the org's Atlassian OAuth token."""
     cloud_id = os.environ.get("CONFLUENCE_OAUTH_CLOUD_ID")
+    # Early check: if stored scopes don't include Confluence, give a clear error before
+    # hitting the API (avoids a cryptic 403 when the OAuth app lacks Confluence permissions)
+    granted = os.environ.get("CONFLUENCE_OAUTH_GRANTED_SCOPES", "")
+    if granted and "read:confluence-content.all" not in granted:
+        raise RuntimeError(
+            "The Atlassian OAuth app is missing Confluence API permissions. "
+            "Go to developer.atlassian.com → your AXIS app → Permissions → "
+            "add 'Confluence API' with read:confluence-content.all scope, then reconnect Confluence."
+        )
     access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
     # OAuth 2.0 (3LO) tokens MUST use the API gateway — they don't work with direct site URLs

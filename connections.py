@@ -48,6 +48,7 @@ def apply_env(provider: str, config: dict) -> None:
                 os.environ["CONFLUENCE_OAUTH_REFRESH_TOKEN"] = config["refresh_token"]
                 os.environ["CONFLUENCE_OAUTH_CLOUD_ID"] = config.get("cloud_id", "")
                 os.environ["CONFLUENCE_OAUTH_TEAM"] = config.get("team", "Engineering")
+                os.environ["CONFLUENCE_OAUTH_GRANTED_SCOPES"] = " ".join(config.get("granted_scopes", []))
                 if config.get("site_url"):
                     os.environ["CONFLUENCE_SITE_URL"] = config["site_url"]
         else:
