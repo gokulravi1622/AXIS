@@ -846,7 +846,7 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
     next_token = None
     while True:
         params = {
-            "jql": "ORDER BY updated DESC", "maxResults": 50,
+            "jql": "updated >= -730d ORDER BY updated DESC", "maxResults": 50,
             "fields": "summary,description,status,assignee,priority,labels,comment,updated,project",
         }
         if next_token:

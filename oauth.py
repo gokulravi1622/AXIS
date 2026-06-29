@@ -94,7 +94,7 @@ def exchange(provider: str, code: str) -> dict:
     if provider == "slack":
         return slack_exchange(code)
     if provider in ("jira", "confluence"):
-        return atlassian_exchange(code)
+        return atlassian_exchange(code, provider)
     if provider == "gdrive":
         return gdrive_exchange(code)
     raise ValueError(f"No OAuth for provider: {provider}")
@@ -182,9 +182,13 @@ def atlassian_authorize_url(state: str) -> str:
     return f"https://auth.atlassian.com/authorize?{q}"
 
 
-def atlassian_exchange(code: str) -> dict:
-    """Exchange code → tokens, then resolve the site's cloudId. Stores the refresh
-    token (a fresh access token is minted from it on each sync)."""
+def atlassian_exchange(code: str, provider: str = "jira") -> dict:
+    """Exchange code → tokens, then resolve the correct cloudId for the target product.
+
+    accessible-resources can return separate entries for Jira and Confluence even on
+    the same Atlassian site — each with a different cloud ID. We must pick the entry
+    whose scopes match the target product, otherwise API calls return 401 scope mismatch.
+    """
     r = requests.post(
         "https://auth.atlassian.com/oauth/token",
         json={"grant_type": "authorization_code", "client_id": ATLASSIAN_CLIENT_ID,
@@ -203,7 +207,10 @@ def atlassian_exchange(code: str) -> dict:
     sites = res.json()
     if not sites:
         raise RuntimeError("No Atlassian sites accessible for this account.")
-    site = sites[0]
+    # Pick the resource whose scopes match the target product — Atlassian can return
+    # separate entries for Jira and Confluence with different cloud IDs.
+    required = "read:confluence-content.all" if provider == "confluence" else "read:jira-work"
+    site = next((s for s in sites if required in s.get("scopes", [])), sites[0])
     granted_scopes = set(site.get("scopes", []))
     return {
         "refresh_token": tok["refresh_token"],
