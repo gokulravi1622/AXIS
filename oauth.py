@@ -44,14 +44,11 @@ ATLASSIAN_REDIRECT_URI = os.environ.get(
     "ATLASSIAN_REDIRECT_URI", "http://localhost:8000/api/connect/atlassian/callback"
 )
 ATLASSIAN_DEFAULT_TEAM = os.environ.get("ATLASSIAN_DEFAULT_TEAM", "Engineering")
-# Confluence uses granular scopes — the classic scope (read:confluence-content.all)
-# is rejected by the Confluence REST API v2 gateway.
-# read:page:confluence  → GET /wiki/api/v2/pages (page metadata + body)
-# read:content:confluence → additional content access (kept for compatibility)
-# Jira keeps classic scopes as they still work fine.
-ATLASSIAN_SCOPES = ("read:jira-work read:jira-user "
-                    "read:page:confluence read:content:confluence "
-                    "offline_access")
+# Jira uses classic scopes; Confluence uses granular scopes (REST API v2 gateway).
+# Mixing them in a single request causes Atlassian to reject the OAuth consent page.
+# We send separate scope sets depending on which product is being connected.
+ATLASSIAN_JIRA_SCOPES = "read:jira-work read:jira-user offline_access"
+ATLASSIAN_CONFLUENCE_SCOPES = "read:page:confluence read:content:confluence offline_access"
 
 
 # ── Google Drive ──────────────────────────────────────────────────────────────
@@ -88,7 +85,7 @@ def authorize_url(provider: str, state: str) -> str:
     if provider == "slack":
         return slack_authorize_url(state)
     if provider in ("jira", "confluence"):
-        return atlassian_authorize_url(state)
+        return atlassian_authorize_url(state, provider)
     if provider == "gdrive":
         return gdrive_authorize_url(state)
     raise ValueError(f"No OAuth for provider: {provider}")
@@ -175,11 +172,12 @@ def slack_exchange(code: str) -> dict:
 
 
 # ── Atlassian authorize + exchange ────────────────────────────────────────────
-def atlassian_authorize_url(state: str) -> str:
+def atlassian_authorize_url(state: str, provider: str = "jira") -> str:
+    scopes = ATLASSIAN_CONFLUENCE_SCOPES if provider == "confluence" else ATLASSIAN_JIRA_SCOPES
     q = urlencode({
         "audience": "api.atlassian.com",
         "client_id": ATLASSIAN_CLIENT_ID,
-        "scope": ATLASSIAN_SCOPES,
+        "scope": scopes,
         "redirect_uri": ATLASSIAN_REDIRECT_URI,
         "state": state,
         "response_type": "code",
