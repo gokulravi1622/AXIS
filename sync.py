@@ -824,8 +824,11 @@ def _atlassian_cloud_id_for(access_token: str, product: str) -> str:
             return ""
         sites = res.json()
         logger.info(f'"accessible-resources" product="{product}" sites={[{"id": s["id"][:8]+"...", "scopes": s.get("scopes", [])} for s in sites]}')
-        # Accept classic OR granular Confluence scope
-        confluece_scopes = {"read:content:confluence", "read:confluence-content.all"}
+        # Accept any Confluence scope (classic or any granular variant)
+        confluece_scopes = {
+            "read:content:confluence", "read:page:confluence",
+            "read:confluence-content.all",
+        }
         if required in confluece_scopes:
             site = next((s for s in sites if confluece_scopes & set(s.get("scopes", []))), None)
         else:
