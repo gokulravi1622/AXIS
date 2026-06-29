@@ -14,6 +14,7 @@ Confluence uses the same base URL, email, and API token as Jira.
 
 import os
 import hashlib
+import logging
 import re
 import html
 from pathlib import Path
@@ -23,6 +24,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+logger = logging.getLogger("axis.sync")
 
 DB_DIR = Path(os.environ.get("AXIS_DB_DIR", str(Path(__file__).parent / "axis_db")))
 COLLECTION_NAME = "axis_context"
@@ -791,11 +794,16 @@ def _atlassian_cloud_id_for(access_token: str, product: str) -> str:
             timeout=15,
         )
         if not res.ok:
+            logger.warning(f'"accessible-resources failed" product="{product}" status={res.status_code}')
             return ""
         sites = res.json()
+        logger.info(f'"accessible-resources" product="{product}" sites={[{"id": s["id"][:8]+"...", "scopes": s.get("scopes", [])} for s in sites]}')
         site = next((s for s in sites if required in s.get("scopes", [])), None) or (sites[0] if sites else None)
+        if site:
+            logger.info(f'"resolved cloud_id" product="{product}" cloud_id="{site["id"][:8]}..." matched_scope="{required in site.get("scopes", [])}"')
         return site["id"] if site else ""
-    except Exception:
+    except Exception as e:
+        logger.warning(f'"accessible-resources exception" product="{product}" error="{e}"')
         return ""
 
 
