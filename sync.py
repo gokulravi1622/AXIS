@@ -774,6 +774,31 @@ def sync_gdrive(progress_cb=None) -> dict:
 # token on each sync (persisting a rotated refresh token back). API calls use Bearer
 # auth against api.atlassian.com/ex/{jira,confluence}/{cloudId}.
 
+def _atlassian_cloud_id_for(access_token: str, product: str) -> str:
+    """Return the cloud_id from accessible-resources whose scopes match the product.
+
+    Atlassian can return separate entries for Jira and Confluence with *different* IDs
+    even on the same site. Calling this at sync time is the only reliable way to get
+    the right ID — the value stored at connect time may be wrong if the user connected
+    before a code fix was deployed.
+    """
+    scope_map = {"jira": "read:jira-work", "confluence": "read:confluence-content.all"}
+    required = scope_map.get(product, "")
+    try:
+        res = requests.get(
+            "https://api.atlassian.com/oauth/token/accessible-resources",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            timeout=15,
+        )
+        if not res.ok:
+            return ""
+        sites = res.json()
+        site = next((s for s in sites if required in s.get("scopes", [])), None) or (sites[0] if sites else None)
+        return site["id"] if site else ""
+    except Exception:
+        return ""
+
+
 def _atlassian_token(refresh_token: str, cloud_id: str, provider: str, org_id) -> str:
     if not (refresh_token and cloud_id):
         raise RuntimeError(f"{provider} (Atlassian) not connected.")
@@ -837,6 +862,11 @@ def _oauth_sync_jira(progress_cb=None) -> dict:
     cloud_id = os.environ.get("JIRA_OAUTH_CLOUD_ID")
     access = _atlassian_token(os.environ.get("JIRA_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "jira", os.environ.get("JIRA_OAUTH_ORG_ID"))
+    # Re-resolve cloud_id from live token — stored value may have been wrong if the user
+    # connected while a previous code version was deployed.
+    resolved = _atlassian_cloud_id_for(access, "jira")
+    if resolved:
+        cloud_id = resolved
     base = f"https://api.atlassian.com/ex/jira/{cloud_id}"
     collection = _get_collection()
     ids, documents, metadatas = [], [], []
@@ -886,6 +916,11 @@ def _oauth_sync_confluence(progress_cb=None) -> dict:
         )
     access = _atlassian_token(os.environ.get("CONFLUENCE_OAUTH_REFRESH_TOKEN"), cloud_id,
                               "confluence", os.environ.get("CONFLUENCE_OAUTH_ORG_ID"))
+    # Re-resolve cloud_id from live token — stored value may be the Jira cloud_id if
+    # accessible-resources was not filtered correctly at connect time.
+    resolved = _atlassian_cloud_id_for(access, "confluence")
+    if resolved:
+        cloud_id = resolved
     # OAuth 2.0 (3LO) tokens MUST use the API gateway — they don't work with direct site URLs
     base = f"https://api.atlassian.com/ex/confluence/{cloud_id}"
     collection = _get_collection()
