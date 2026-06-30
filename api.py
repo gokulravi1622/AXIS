@@ -13,7 +13,7 @@ import logging
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
@@ -44,7 +44,7 @@ if _sentry_dsn:
 _sync_jobs: dict[str, dict] = {}   # job_id → {status, log, result, error, started_at, finished_at}
 
 from query import ask, build_ask_messages, stream_answer
-from contribute import submit_context, get_doc_count
+from contribute import submit_context, get_doc_count, extract_text
 from sync import sync_jira, sync_confluence, sync_slack, sync_notion, sync_gdrive, sync_all
 from scheduler import start as start_scheduler, status as scheduler_status, stop as stop_scheduler, get_events_since
 import secrets
@@ -619,5 +619,31 @@ def contribute(req: ContributeRequest):
             tags=req.tags,
         )
         return {"id": new_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/contribute/file")
+async def contribute_file(
+    team: str = Form(...),
+    title: str = Form(""),
+    author: str = Form(""),
+    tags: str = Form(""),
+    file: UploadFile = File(...),
+):
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large. Max 10 MB.")
+    try:
+        content = extract_text(file.filename, data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not content:
+        raise HTTPException(status_code=400, detail="Could not extract any text from the file.")
+    doc_title = title.strip() or Path(file.filename).stem
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    try:
+        new_id = submit_context(team=team, title=doc_title, content=content, author=author, tags=tag_list)
+        return {"id": new_id, "title": doc_title, "chars": len(content)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

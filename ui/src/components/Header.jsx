@@ -1,3 +1,54 @@
+import { useState } from 'react'
+
+function LogoutModal({ onConfirm, onCancel }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 20,
+        padding: '32px 28px',
+        width: 340,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+        animation: 'modal-in 0.2s ease',
+      }}>
+        <style>{`@keyframes modal-in { from { opacity:0; transform:scale(0.95) translateY(8px) } to { opacity:1; transform:scale(1) translateY(0) } }`}</style>
+
+        <div style={{ width: 52, height: 52, borderRadius: 14, margin: '0 auto 20px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src="/logout.png" alt="Log out" style={{ width: 24, height: 24, objectFit: 'contain', filter: 'invert(40%) sepia(80%) saturate(400%) hue-rotate(320deg)' }} />
+        </div>
+
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text1)', letterSpacing: '-0.02em', marginBottom: 8 }}>Log out?</div>
+          <div style={{ fontSize: 13.5, color: 'var(--text3)', lineHeight: 1.6 }}>Your session will end and you'll need to sign in again.</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel} style={{
+            flex: 1, height: 42, borderRadius: 11,
+            border: '1px solid var(--border)', background: 'var(--surface2)',
+            color: 'var(--text2)', fontSize: 14, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border2)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >Cancel</button>
+          <button onClick={onConfirm} style={{
+            flex: 1, height: 42, borderRadius: 11, border: 'none',
+            background: '#EF4444', color: '#fff', fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+            boxShadow: '0 4px 14px rgba(239,68,68,0.35)',
+          }}>Log out</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const TEAM_META = {
   null: { label: 'All Teams', color: 'var(--c-all)' },
   engineering: { label: 'Engineering', color: 'var(--c-eng)' },
@@ -7,10 +58,11 @@ const TEAM_META = {
   product: { label: 'Product', color: 'var(--c-prod)' },
 }
 
-export default function Header({ teamFilter, user, onLogout }) {
+export default function Header({ teamFilter, user, onLogout, theme, setTheme }) {
   const key = teamFilter === null ? 'null' : teamFilter
   const meta = TEAM_META[key] || TEAM_META['null']
   const initial = user?.name?.trim()?.[0]?.toUpperCase() || '?'
+  const [showModal, setShowModal] = useState(false)
 
   return (
     <div style={{
@@ -56,21 +108,36 @@ export default function Header({ teamFilter, user, onLogout }) {
             </div>
           </div>
           <button
-            onClick={onLogout}
+            onClick={() => setTheme?.(t => t === 'dark' ? 'light' : 'dark')}
+            aria-label="Toggle theme"
+            style={{ width: 34, height: 34, borderRadius: 9, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <img src={theme === 'dark' ? '/day-mode.png' : '/dark.png'} alt="Toggle theme" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
             title="Log out"
             style={{
-              height: 30, padding: '0 12px',
-              borderRadius: 8, border: '1px solid var(--border)',
-              background: 'var(--surface2)', color: 'var(--text2)',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              fontFamily: 'Inter, sans-serif', transition: 'all 0.15s',
+              width: 34, height: 34, borderRadius: 9,
+              border: '1px solid var(--border)', background: 'var(--surface2)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'border-color 0.15s, background 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.color = 'var(--text1)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#F87171'; e.currentTarget.style.background = 'rgba(248,113,113,0.08)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface2)' }}
           >
-            Log out
+            <img src="/logout.png" alt="Log out" style={{ width: 16, height: 16, objectFit: 'contain', opacity: 0.6 }} />
           </button>
         </div>
+      )}
+
+      {showModal && (
+        <LogoutModal
+          onConfirm={() => { setShowModal(false); onLogout() }}
+          onCancel={() => setShowModal(false)}
+        />
       )}
     </div>
   )

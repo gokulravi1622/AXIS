@@ -9,17 +9,17 @@ const post = (path, body) =>
   fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 const FEATURES = [
-  { iconPaths: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'], title: 'Understands context, not just keywords', color: '#6366F1',
+  { icon: '/flash.png',    title: 'Understands context, not just keywords', color: '#6366F1',
     desc: 'Ask follow-up questions, reference earlier answers, and get responses that actually understand what you mean. Not just keyword matches.' },
-  { iconPaths: ['M12 2L2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'], title: 'Smarter search, better results', color: '#8B5CF6',
+  { icon: '/layers.png',   title: 'Smarter search, better results', color: '#8B5CF6',
     desc: 'Uses AI and keyword search together to find the most useful sources every time — not just the ones that match your exact wording.' },
-  { iconPaths: ['M9 17H7a5 5 0 0 1 0-10h2', 'M15 7h2a5 5 0 0 1 0 10h-2', 'M11 12h2'], title: 'Every answer is sourced', color: '#3B82F6',
+  { icon: '/link.png',     title: 'Every answer is sourced', color: '#3B82F6',
     desc: 'Answers link back to the exact ticket, page, or doc they came from. No guessing, no fabrication.' },
-  { iconPaths: ['M3 17l5-5 4 4 8-8', 'M17 7h4v4'], title: 'Gets better with feedback', color: '#10B981',
+  { icon: '/up-arrow.png', title: 'Gets better with feedback', color: '#10B981',
     desc: 'Rate answers with thumbs up or down. The more your team rates, the better the results get over time.' },
-  { iconPaths: ['M23 4v6h-6', 'M1 20v-6h6', 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10', 'M1 14l4.64 4.36A9 9 0 0 0 20.49 15'], title: 'One-click data sync', color: '#F59E0B',
+  { icon: '/refresh.png',  title: 'One-click data sync', color: '#F59E0B',
     desc: 'Connect Jira, Confluence, Slack, Notion, and Google Drive via OAuth. AXIS re-indexes every 6 hours so answers stay current.' },
-  { iconPaths: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'], title: 'Private by design', color: '#EC4899',
+  { icon: '/shield.png',   title: 'Private by design', color: '#EC4899',
     desc: 'Each team has its own private data store. Your docs are never shared with or visible to anyone else.' },
 ]
 
@@ -36,11 +36,11 @@ const STEPS = [
 ]
 
 const INTEGRATIONS = [
-  { label: 'Jira', color: '#6366F1' },
-  { label: 'Confluence', color: '#3B82F6' },
-  { label: 'Slack', color: '#8B5CF6' },
-  { label: 'Notion', color: '#10B981' },
-  { label: 'Google Drive', color: '#F59E0B' },
+  { label: 'Jira', color: '#2684FF', icon: '/jira.png' },
+  { label: 'Confluence', color: '#2684FF', icon: '/confluence.png' },
+  { label: 'Slack', color: '#E01E5A', icon: '/slack.png' },
+  { label: 'Notion', color: '#000000', icon: '/notion.png' },
+  { label: 'Google Drive', color: '#34A853', icon: '/gdrive.png' },
 ]
 
 // Scroll-reveal: adds .axis-visible to any .axis-reveal element that enters viewport
@@ -133,6 +133,8 @@ export default function Login({ onAuth, theme, setTheme }) {
   const [loading, setLoading] = useState(false)
   const [focusedField, setFocusedField] = useState(null)
   const [pw2Touched, setPw2Touched] = useState(false)
+  const [showPw, setShowPw] = useState(false)
+  const [showPw2, setShowPw2] = useState(false)
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const heroRef = useRef(null)
 
@@ -273,17 +275,27 @@ export default function Login({ onAuth, theme, setTheme }) {
               autoComplete="email"
               onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-            <input type="password" placeholder={isSignup ? 'Password (min 6 chars)' : 'Password'} value={form.password} required style={inputStyle('pw')}
-              autoComplete={isSignup ? 'new-password' : 'current-password'}
-              onFocus={() => setFocusedField('pw')} onBlur={() => setFocusedField(null)}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+            <div style={{ position: 'relative' }}>
+              <input type={showPw ? 'text' : 'password'} placeholder={isSignup ? 'Password (min 6 chars)' : 'Password'} value={form.password} required style={{ ...inputStyle('pw'), paddingRight: 40 }}
+                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                onFocus={() => setFocusedField('pw')} onBlur={() => setFocusedField(null)}
+                onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+              <button type="button" onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+                <img src={showPw ? '/eyeopen.png' : '/eyeclose.png'} alt={showPw ? 'Hide' : 'Show'} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.5 }} />
+              </button>
+            </div>
             {isSignup && (
-              <input type="password" placeholder="Confirm password" value={form.password_confirm} required
-                autoComplete="new-password"
-                style={{ ...inputStyle('pw2'), borderColor: pw2Touched && form.password !== form.password_confirm ? '#F87171' : focusedField === 'pw2' ? 'var(--accent)' : 'var(--border)' }}
-                onFocus={() => setFocusedField('pw2')}
-                onBlur={() => { setFocusedField(null); setPw2Touched(true) }}
-                onChange={e => setForm(f => ({ ...f, password_confirm: e.target.value }))} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPw2 ? 'text' : 'password'} placeholder="Confirm password" value={form.password_confirm} required
+                  autoComplete="new-password"
+                  style={{ ...inputStyle('pw2'), paddingRight: 40, borderColor: pw2Touched && form.password !== form.password_confirm ? '#F87171' : focusedField === 'pw2' ? 'var(--accent)' : 'var(--border)' }}
+                  onFocus={() => setFocusedField('pw2')}
+                  onBlur={() => { setFocusedField(null); setPw2Touched(true) }}
+                  onChange={e => setForm(f => ({ ...f, password_confirm: e.target.value }))} />
+                <button type="button" onClick={() => setShowPw2(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+                  <img src={showPw2 ? '/eyeopen.png' : '/eyeclose.png'} alt={showPw2 ? 'Hide' : 'Show'} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.5 }} />
+                </button>
+              </div>
             )}
             {error && (
               <div style={{ fontSize: 12.5, color: '#F87171', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 9, padding: '8px 12px' }}>{error}</div>
@@ -343,7 +355,7 @@ export default function Login({ onAuth, theme, setTheme }) {
   )
 
   return (
-    <div style={{ minHeight: '100vh', width: '100%', overflowX: 'hidden', background: 'var(--bg)', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ minHeight: '100vh', width: '100%', overflowX: 'hidden', background: 'var(--bg)', fontFamily: 'Inter, sans-serif', paddingTop: 64 }}>
       <style>{`
         html { scroll-behavior: smooth }
         * { box-sizing: border-box }
@@ -382,7 +394,7 @@ export default function Login({ onAuth, theme, setTheme }) {
 
       {/* ── Navbar ── */}
       <nav style={{
-        position: 'sticky', top: 0, zIndex: 100, height: 64,
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, height: 64,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 6vw',
         background: 'var(--surface)',
@@ -397,20 +409,19 @@ export default function Login({ onAuth, theme, setTheme }) {
         <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <a href="#features" className="axis-nav-link">Features</a>
           <a href="#how" className="axis-nav-link">How it works</a>
-          <a href="#integrations" className="axis-nav-link">Integrations</a>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => goAuth('login')} style={{ height: 36, padding: '0 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text1)', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s' }}>Sign in</button>
+          <button onClick={() => goAuth('signup')} style={{ height: 36, padding: '0 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'Inter, sans-serif', boxShadow: '0 2px 10px rgba(99,102,241,0.35)' }}>Get started</button>
           <button
             onClick={() => setTheme?.(theme === 'dark' ? 'light' : 'dark')}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.15s, color 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--text1)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)' }}
+            style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'border-color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            <img src={theme === 'dark' ? '/day-mode.png' : '/dark.png'} alt={theme === 'dark' ? 'Light mode' : 'Dark mode'} style={{ width: 20, height: 20, objectFit: 'contain' }} />
           </button>
-          <button onClick={() => goAuth('login')} style={{ height: 36, padding: '0 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text1)', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s' }}>Sign in</button>
-          <button onClick={() => goAuth('signup')} style={{ height: 36, padding: '0 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'Inter, sans-serif', boxShadow: '0 2px 10px rgba(99,102,241,0.35)' }}>Get started</button>
         </div>
       </nav>
 
@@ -429,8 +440,7 @@ export default function Login({ onAuth, theme, setTheme }) {
           {/* Left: copy */}
           <div className="hero-text" style={{ flex: '1 1 480px' }}>
             <div className="hero-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 20, background: 'var(--accent-dim)', border: '1px solid rgba(99,102,241,0.3)', fontSize: 12.5, fontWeight: 700, color: 'var(--accent-text, var(--accent))', marginBottom: 28 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', animation: 'pulse-ring 2s ease-in-out infinite' }} />
-              ✦ AI-Powered Knowledge Platform
+              <img src="/ai.png" alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> AI-Powered Knowledge Platform
             </div>
 
             <h1 className="axis-h1 hero-h1" style={{ fontSize: 68, lineHeight: 1.04, fontWeight: 900, color: 'var(--text1)', letterSpacing: '-0.04em', margin: '0 0 24px' }}>
@@ -500,9 +510,7 @@ export default function Login({ onAuth, theme, setTheme }) {
               animation: 'float 6s ease-in-out infinite',
             }}>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><path d="M7 7h.01" />
-                </svg>
+                <img src="/jira.png" alt="Jira" style={{ width: 18, height: 18, objectFit: 'contain' }} />
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text1)' }}>Jira · 3 tickets</div>
@@ -548,7 +556,7 @@ export default function Login({ onAuth, theme, setTheme }) {
           <div className="axis-marquee-track">
             {[...INTEGRATIONS, ...INTEGRATIONS, ...INTEGRATIONS, ...INTEGRATIONS].map((s, i) => (
               <div key={i} className="axis-int-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 18px', background: 'var(--surface2)', border: `1px solid ${s.color}33`, borderRadius: 40, fontSize: 14, fontWeight: 600, color: 'var(--text1)', cursor: 'default', marginRight: 14, flexShrink: 0 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color, display: 'inline-block', flexShrink: 0 }} />
+                <img src={s.icon} alt={s.label} style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }} />
                 {s.label}
               </div>
             ))}
@@ -572,9 +580,7 @@ export default function Login({ onAuth, theme, setTheme }) {
               onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = 'var(--border)' }}
             >
               <div style={{ width: 44, height: 44, borderRadius: 13, background: f.color + '15', border: `1px solid ${f.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={f.color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                  {f.iconPaths.map((d, pi) => <path key={pi} d={d} />)}
-                </svg>
+                <img src={f.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain' }} />
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text1)', marginBottom: 8, letterSpacing: '-0.01em' }}>{f.title}</div>
               <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.65 }}>{f.desc}</div>
@@ -636,24 +642,45 @@ export default function Login({ onAuth, theme, setTheme }) {
       </section>
 
       {/* ── Footer ── */}
-      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)', padding: '40px 8vw' }}>
-        <div style={{ maxWidth: 1600, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/axis-logo.png" alt="AXIS" style={{ width: 28, height: 28, borderRadius: 8, objectFit: 'contain' }} />
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--text1)', letterSpacing: '-0.02em' }}>AXIS</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Centralized knowledge layer</div>
+      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)', padding: '56px 8vw 32px' }}>
+        <div style={{ maxWidth: 1600, margin: '0 auto' }}>
+          {/* Top row */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 48, justifyContent: 'space-between', marginBottom: 48 }}>
+            {/* Brand */}
+            <div style={{ maxWidth: 280 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <img src="/axis-logo.png" alt="AXIS" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'contain' }} />
+                <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--text1)', letterSpacing: '-0.02em' }}>AXIS</span>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.65, margin: 0 }}>
+                One place for your team's knowledge. Ask anything, get a sourced answer.
+              </p>
+            </div>
+
+            {/* Links columns */}
+            <div style={{ display: 'flex', gap: 56, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Product</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <a href="#features" className="axis-nav-link" style={{ fontSize: 13.5 }}>Features</a>
+                  <a href="#how" className="axis-nav-link" style={{ fontSize: 13.5 }}>How it works</a>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Account</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <button onClick={() => goAuth('login')} style={{ ...linkBtn, fontSize: 13.5, textAlign: 'left' }}>Sign in</button>
+                  <button onClick={() => goAuth('signup')} style={{ ...linkBtn, fontSize: 13.5, textAlign: 'left' }}>Get started free</button>
+                </div>
+              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-            <a href="#features" className="axis-nav-link">Features</a>
-            <a href="#how" className="axis-nav-link">How it works</a>
-            <a href="#integrations" className="axis-nav-link">Integrations</a>
-            <button onClick={() => goAuth('signup')} style={linkBtn}>Get started →</button>
+
+          {/* Bottom bar */}
+          <div style={{ paddingTop: 20, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>© {new Date().getFullYear()} AXIS. All rights reserved.</span>
+            <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>One source of truth for every team.</span>
           </div>
-        </div>
-        <div style={{ maxWidth: 1600, margin: '20px auto 0', paddingTop: 18, borderTop: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text3)', textAlign: 'center' }}>
-          © {new Date().getFullYear()} AXIS · one source of truth for every team.
         </div>
       </footer>
     </div>

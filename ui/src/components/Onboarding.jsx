@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 
 // Per-provider form fields + guided instructions shown during onboarding.
+const PROVIDER_ICONS = {
+  jira: '/jira.png',
+  confluence: '/confluence.png',
+  slack: '/slack.png',
+  notion: '/notion.png',
+  gdrive: '/gdrive.png',
+}
+
 const PROVIDERS = {
   jira: {
     label: 'Jira', color: 'var(--c-eng)',
@@ -153,7 +161,7 @@ export default function Onboarding({ token, orgName, onComplete }) {
                     border: `1px solid ${on ? meta.color : 'var(--border)'}`,
                     transition: 'all 0.15s',
                   }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+                    <img src={PROVIDER_ICONS[p]} alt={meta.label} style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text1)', flex: 1 }}>{meta.label}</span>
                     <span style={{ fontSize: 16, color: on ? meta.color : 'var(--text3)' }}>{on ? '✓' : '+'}</span>
                   </button>
@@ -189,7 +197,7 @@ export default function Onboarding({ token, orgName, onComplete }) {
                 return (
                   <div key={p} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 18 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: meta.color }} />
+                      <img src={PROVIDER_ICONS[p]} alt={meta.label} style={{ width: 20, height: 20, objectFit: 'contain' }} />
                       <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)' }}>{meta.label}</span>
                       {st.connected && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>✓ connected</span>}
                     </div>

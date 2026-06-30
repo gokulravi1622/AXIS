@@ -10,11 +10,6 @@ const SUGGESTIONS = [
   { team: 'Client Success', color: '#10B981', hex: '#10B981', icon: '🤝', question: 'What is the onboarding process for new clients?', sub: 'Onboarding · Retention' },
 ]
 
-const STATS = [
-  { label: 'Docs Indexed', value: '41+', color: '#6366F1' },
-  { label: 'Teams Connected', value: '5', color: '#F59E0B' },
-  { label: 'Sources', value: '3', color: '#10B981' },
-]
 
 function SuggestionCard({ s, index, onClick }) {
   const cardRef = useRef(null)
@@ -121,50 +116,38 @@ function EmptyState({ onSuggest }) {
       </div>
 
       {/* Hero */}
-      <div style={{ position: 'relative', width: '100%', textAlign: 'center', padding: '64px 24px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ position: 'relative', width: '100%', textAlign: 'center', padding: '40px 24px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
         {/* Badge */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
           padding: '5px 14px', borderRadius: 999,
           background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.25)',
-          marginBottom: 28,
+          marginBottom: 20,
           animation: 'fadeSlideUp 0.5s ease both',
         }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366F1', animation: 'pulse-dot 2s ease infinite' }} />
+          <img src="/ai.png" alt="" style={{ width: 13, height: 13, objectFit: 'contain' }} />
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-text)', letterSpacing: '0.04em' }}>AI-Powered Knowledge Layer</span>
         </div>
 
-        {/* Logo + Headline */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 20, animation: 'fadeSlideUp 0.5s 0.1s ease both' }}>
-          <img src="/axis-logo.png" alt="AXIS" style={{ width: 56, height: 56, borderRadius: 16, objectFit: 'contain', flexShrink: 0 }} />
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.04em', color: 'var(--text1)' }}>
-              Ask <span className="gradient-text">anything</span>
-            </div>
-            <div style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.04em', color: 'var(--text1)' }}>
-              about your team.
+        {/* Logo + Headline — fully centered */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 16, animation: 'fadeSlideUp 0.5s 0.1s ease both' }}>
+          <img src="/axis-logo.png" alt="AXIS" style={{ width: 52, height: 52, borderRadius: 14, objectFit: 'contain', flexShrink: 0 }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.04em', color: 'var(--text1)' }}>
+              Ask <span className="gradient-text">anything</span> about your team.
             </div>
           </div>
         </div>
 
-        <p style={{ fontSize: 'clamp(14px, 1.5vw, 16px)', color: 'var(--text2)', maxWidth: 520, lineHeight: 1.65, margin: '0 auto 40px', animation: 'fadeSlideUp 0.5s 0.2s ease both' }}>
+        <p style={{ fontSize: 'clamp(13px, 1.4vw, 15px)', color: 'var(--text2)', maxWidth: 480, lineHeight: 1.6, margin: '0 auto 20px', animation: 'fadeSlideUp 0.5s 0.2s ease both' }}>
           AXIS searches all your connected tools and gives you a clear answer with clickable sources.
         </p>
 
-        {/* Stats strip */}
-        <div style={{ display: 'flex', gap: 'clamp(16px, 3vw, 40px)', justifyContent: 'center', flexWrap: 'wrap', animation: 'fadeSlideUp 0.5s 0.3s ease both', marginBottom: 0 }}>
-          {STATS.map((st, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(20px, 2.5vw, 26px)', fontWeight: 700, color: st.color }}>{st.value}</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{st.label}</div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Divider */}
-      <div style={{ width: '100%', maxWidth: 800, height: 1, background: 'linear-gradient(90deg, transparent, var(--border), transparent)', margin: '0 auto 36px', position: 'relative' }} />
+      <div style={{ width: '100%', maxWidth: 800, height: 1, background: 'linear-gradient(90deg, transparent, var(--border), transparent)', margin: '0 auto 24px', position: 'relative' }} />
 
       {/* Cards grid */}
       <div style={{ position: 'relative', width: '100%', padding: '0 clamp(16px, 4vw, 48px)' }}>

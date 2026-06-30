@@ -13,16 +13,15 @@ const TEAM_OPTIONS = TEAMS.filter(t => t.id !== null)
 
 // [target key, button label] — key matches the count field in the /api/sync response
 const SYNC_SOURCES = [
-  ['jira', 'Jira'],
-  ['confluence', 'Confluence'],
-  ['slack', 'Slack'],
-  ['notion', 'Notion'],
-  ['gdrive', 'Drive'],
+  ['jira', 'Jira', '/jira.png'],
+  ['confluence', 'Confluence', '/confluence.png'],
+  ['slack', 'Slack', '/slack.png'],
+  ['notion', 'Notion', '/notion.png'],
+  ['gdrive', 'Drive', '/gdrive.png'],
 ]
 
 export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, onSyncDone, onClearChat, addToast, token,
   conversations = [], currentConvId, onNewChat, onSelectConversation, onDeleteConversation, onManageConnections }) {
-  const [stats, setStats] = useState({ total: 0, teams: 0, byTeam: {} })
   const [syncLoading, setSyncLoading] = useState({})
   const [syncResults, setSyncResults] = useState({})
   const [syncLogOpen, setSyncLogOpen] = useState(false)
@@ -30,16 +29,21 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
   const [form, setForm] = useState({ team: 'engineering', name: '', title: '', content: '', tags: '' })
   const [formStatus, setFormStatus] = useState(null)
   const [formLoading, setFormLoading] = useState(false)
+  const [attachedFile, setAttachedFile] = useState(null)
+  const [openMenu, setOpenMenu] = useState(null) // { id, x, y }
+  const [hoveredConvId, setHoveredConvId] = useState(null)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  useEffect(() => {
+    if (!openMenu) return
+    const close = () => setOpenMenu(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [openMenu])
   const [schedulerStatus, setSchedulerStatus] = useState(null)
   const [countdown, setCountdown] = useState(null)
   const [connections, setConnections] = useState([])
-
-  useEffect(() => {
-    fetch('/api/stats')
-      .then(r => r.json())
-      .then(d => setStats(d))
-      .catch(() => {})
-  }, [])
 
   // Which sources this org connected during onboarding
   const loadConnections = useCallback(() => {
@@ -58,6 +62,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
     ? SYNC_SOURCES.filter(([k]) => connectedKeys.includes(k))
     : SYNC_SOURCES
 
+
   // Build the Workspace (team) filter from the connected sources' teams.
   const TEAM_BY_LABEL = Object.fromEntries(TEAMS.filter(t => t.id).map(t => [t.label, t]))
   const connectedTeamLabels = [...new Set(
@@ -67,7 +72,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
     ? [TEAMS[0], ...connectedTeamLabels.map(l =>
         TEAM_BY_LABEL[l] || { id: l.toLowerCase().replace(/\s+/g, '_'), label: l, color: 'var(--c-all)' }
       )]
-    : TEAMS
+    : [TEAMS[0]]
 
   // Fetch scheduler status on mount + every 60s
   useEffect(() => {
@@ -150,18 +155,33 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
     setFormLoading(true)
     setFormStatus(null)
     try {
-      const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
-      const res = await fetch('/api/contribute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ team: form.team, title: form.title, content: form.content, author: form.name || 'Anonymous', tags }),
-      })
-      const data = await res.json()
-      if (data.id) {
-        setFormStatus({ ok: true, msg: 'Context added successfully!' })
-        setForm({ team: 'engineering', name: '', title: '', content: '', tags: '' })
+      let res
+      if (attachedFile) {
+        const fd = new FormData()
+        fd.append('team', form.team)
+        fd.append('title', form.title)
+        fd.append('author', form.name || '')
+        fd.append('tags', form.tags)
+        fd.append('file', attachedFile)
+        res = await fetch('/api/contribute/file', { method: 'POST', body: fd })
       } else {
-        setFormStatus({ ok: false, msg: 'Failed to add context.' })
+        const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
+        res = await fetch('/api/contribute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ team: form.team, title: form.title, content: form.content, author: form.name || 'Anonymous', tags }),
+        })
+      }
+      const data = await res.json()
+      if (!res.ok) {
+        setFormStatus({ ok: false, msg: data.detail || 'Failed to add context.' })
+      } else {
+        const msg = attachedFile
+          ? `"${data.title}" added (${data.chars?.toLocaleString()} chars)`
+          : 'Context added successfully!'
+        setFormStatus({ ok: true, msg })
+        setForm({ team: 'engineering', name: '', title: '', content: '', tags: '' })
+        setAttachedFile(null)
       }
     } catch {
       setFormStatus({ ok: false, msg: 'Network error.' })
@@ -214,8 +234,8 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
 
   return (
     <div style={{
-      width: 272,
-      minWidth: 272,
+      width: 300,
+      minWidth: 300,
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',
       height: '100%',
@@ -256,31 +276,57 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
             )}
             {conversations.map(c => {
               const active = c.id === currentConvId
+              const menuOpen = openMenu?.id === c.id
+              const isRenaming = renamingId === c.id
               return (
-                <div
-                  key={c.id}
-                  onClick={() => onSelectConversation(c.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 8px 7px 10px',
-                    borderRadius: 8, cursor: 'pointer', marginBottom: 1,
-                    background: active ? 'var(--accent-dim)' : 'transparent',
-                    border: active ? '1px solid var(--accent)' : '1px solid transparent',
-                  }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface2)' }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                <div key={c.id} style={{ position: 'relative' }}
+                  onMouseEnter={() => setHoveredConvId(c.id)}
+                  onMouseLeave={() => { if (!menuOpen) setHoveredConvId(null) }}
                 >
-                  <span style={{ flex: 1, fontSize: 12.5, color: active ? 'var(--text1)' : 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.title}>
-                    {c.title}
-                  </span>
-                  <button
-                    onClick={e => { e.stopPropagation(); onDeleteConversation(c.id) }}
-                    title="Delete chat"
-                    style={{ border: 'none', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#F87171' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text3)' }}
+                  <div
+                    onClick={() => { if (!isRenaming) onSelectConversation(c.id) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: isRenaming ? '4px 8px 4px 10px' : '7px 8px 7px 10px',
+                      borderRadius: 8, cursor: isRenaming ? 'default' : 'pointer', marginBottom: 1,
+                      background: active ? 'var(--accent-dim)' : 'transparent',
+                      border: active ? '1px solid var(--accent)' : '1px solid transparent',
+                    }}
+                    onMouseEnter={e => { if (!active && !isRenaming) e.currentTarget.style.background = 'var(--surface2)' }}
+                    onMouseLeave={e => { if (!active && !isRenaming) e.currentTarget.style.background = 'transparent' }}
                   >
-                    ×
-                  </button>
+                    {isRenaming ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onBlur={() => setRenamingId(null)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') setRenamingId(null)
+                          if (e.key === 'Escape') setRenamingId(null)
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ flex: 1, fontSize: 12.5, background: 'var(--surface2)', border: '1px solid var(--accent)', borderRadius: 5, color: 'var(--text1)', padding: '3px 7px', outline: 'none', fontFamily: 'Inter, sans-serif' }}
+                      />
+                    ) : (
+                      <span style={{ flex: 1, fontSize: 12.5, color: active ? 'var(--text1)' : 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.title}>
+                        {c.title}
+                      </span>
+                    )}
+                    {!isRenaming && (hoveredConvId === c.id || menuOpen) && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (menuOpen) { setOpenMenu(null); return }
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setOpenMenu({ id: c.id, title: c.title, x: rect.right, y: rect.bottom + 4 })
+                        }}
+                        style={{ border: 'none', background: 'none', color: menuOpen ? 'var(--text1)' : 'var(--text3)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 3px', flexShrink: 0, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22 }}
+                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--text1)'; e.currentTarget.style.background = 'var(--surface2)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = menuOpen ? 'var(--text1)' : 'var(--text3)'; e.currentTarget.style.background = 'none' }}
+                      >⋮</button>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -322,20 +368,11 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
           })}
         </div>
 
-        {/* Stats */}
-        <div style={sectionLabel}>Overview</div>
-        <div style={{ margin: '0 8px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 8px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
-          {[
-            { label: 'Docs', value: stats.total },
-            { label: 'Teams', value: stats.teams },
-            { label: 'Queries', value: '—' },
-          ].map(s => (
-            <div key={s.label} style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 16, fontWeight: 600, color: 'var(--text1)' }}>{s.value}</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
+        {!connectedTeamLabels.length && (
+          <div style={{ margin: '4px 8px 0', fontSize: 11, color: 'var(--text3)', padding: '6px 10px', background: 'var(--surface2)', borderRadius: 8, lineHeight: 1.5 }}>
+            Teams appear after your first sync
+          </div>
+        )}
 
         {/* Data Sync */}
         <div style={sectionLabel}>Data Sync</div>
@@ -352,7 +389,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
             + Connect a tool
           </button>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {displaySources.map(([target, label]) => (
+            {displaySources.map(([target, label, icon]) => (
               <button
                 key={target}
                 onClick={() => handleSync(target)}
@@ -361,7 +398,9 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
               >
                 {syncLoading[target] ? (
                   <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--border2)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                ) : null}
+                ) : (
+                  <img src={icon} alt={label} style={{ width: 14, height: 14, objectFit: 'contain' }} />
+                )}
                 {label}
               </button>
             ))}
@@ -444,57 +483,116 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
               style={inputStyle}
             />
             <input
-              placeholder="Title *"
+              placeholder={attachedFile ? 'Title (optional — defaults to filename)' : 'Title *'}
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              required
+              required={!attachedFile}
               style={inputStyle}
             />
-            <textarea
-              placeholder="Details / content *"
-              value={form.content}
-              onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-              required
-              rows={4}
-              style={{ ...inputStyle, height: 'auto', padding: '8px 10px', resize: 'vertical' }}
-            />
+
+            {/* File attach or text content */}
+            {attachedFile ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 8 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span style={{ fontSize: 11.5, color: 'var(--text2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--text3)', flexShrink: 0 }}>{(attachedFile.size / 1024).toFixed(0)} KB</span>
+                <button type="button" onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#F87171'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text3)'}
+                >×</button>
+              </div>
+            ) : (
+              <textarea
+                placeholder="Details / content *"
+                value={form.content}
+                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                required
+                rows={4}
+                style={{ ...inputStyle, height: 'auto', padding: '8px 10px', resize: 'vertical' }}
+              />
+            )}
+
             <input
               placeholder="Tags (comma-separated)"
               value={form.tags}
               onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
               style={inputStyle}
             />
+
+            {/* Hidden file input */}
+            <input
+              id="ctx-file-input"
+              type="file"
+              accept=".pdf,.docx,.txt,.md,.csv"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) setAttachedFile(f); e.target.value = '' }}
+            />
+
             {formStatus && (
               <div style={{ fontSize: 12, color: formStatus.ok ? 'var(--c-cs)' : '#F87171', padding: '4px 6px', background: formStatus.ok ? 'rgba(16,185,129,0.08)' : 'rgba(248,113,113,0.08)', borderRadius: 6 }}>
                 {formStatus.msg}
               </div>
             )}
-            <button
-              type="submit"
-              disabled={formLoading}
-              style={{ height: 34, background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: formLoading ? 'not-allowed' : 'pointer', opacity: formLoading ? 0.7 : 1, fontFamily: 'Inter, sans-serif' }}
-            >
-              {formLoading ? 'Adding…' : 'Add Context'}
-            </button>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                title="Attach a file (PDF, DOCX, TXT, MD)"
+                onClick={() => document.getElementById('ctx-file-input').click()}
+                style={{ height: 34, width: 36, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.42 16.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+              </button>
+              <button
+                type="submit"
+                disabled={formLoading}
+                style={{ flex: 1, height: 34, background: 'var(--accent)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: formLoading ? 'not-allowed' : 'pointer', opacity: formLoading ? 0.7 : 1, fontFamily: 'Inter, sans-serif' }}
+              >
+                {formLoading ? 'Adding…' : 'Add Context'}
+              </button>
+            </div>
           </form>
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={{ borderTop: '1px solid var(--border)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button
-          onClick={onClearChat}
-          style={{ ...btnBase, flex: 'none', width: '100%', justifyContent: 'center' }}
+      {/* Conversation context menu — rendered at fixed position to escape overflow:hidden */}
+      {openMenu && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed', left: openMenu.x - 152, top: openMenu.y, zIndex: 9999,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+            padding: 4, minWidth: 152,
+          }}
         >
-          Clear Chat
-        </button>
-        <button
-          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-          style={{ ...btnBase, flex: 'none', width: '100%', justifyContent: 'center' }}
-        >
-          {theme === 'dark' ? '☀ Light Mode' : '☽ Dark Mode'}
-        </button>
-      </div>
+          <button
+            onClick={() => { setRenameValue(openMenu.title); setRenamingId(openMenu.id); setOpenMenu(null) }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 7, border: 'none', background: 'none', color: 'var(--text1)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', textAlign: 'left' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Rename
+          </button>
+          <div style={{ height: 1, background: 'var(--border)', margin: '3px 4px' }} />
+          <button
+            onClick={() => { const id = openMenu.id; setOpenMenu(null); setHoveredConvId(null); onDeleteConversation(id) }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 7, border: 'none', background: 'none', color: '#F87171', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif', textAlign: 'left' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.08)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Delete
+          </button>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }

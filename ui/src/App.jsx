@@ -307,7 +307,7 @@ export default function App() {
         onDeleteConversation={handleDeleteConversation}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <Header teamFilter={teamFilter} user={user} onLogout={handleLogout} />
+        <Header teamFilter={teamFilter} user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />
         <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
           <ChatArea messages={messages} loading={loading} onSuggest={handleSend} onFeedback={handleFeedback} />
           <div ref={chatEndRef} />

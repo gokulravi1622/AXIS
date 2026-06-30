@@ -3,6 +3,7 @@ AXIS — Contribution Engine
 Lets employees submit new context entries that are immediately searchable.
 """
 
+import io
 import json
 import os
 import re
@@ -104,6 +105,28 @@ def submit_context(
         pass
 
     return new_id
+
+
+def extract_text(filename: str, data: bytes) -> str:
+    """Extract plain text from PDF, DOCX, TXT, or MD file bytes."""
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data))
+            return "\n".join(p.extract_text() or "" for p in reader.pages).strip()
+        except Exception as e:
+            raise ValueError(f"Could not read PDF: {e}")
+    if ext in (".docx",):
+        try:
+            from docx import Document
+            doc = Document(io.BytesIO(data))
+            return "\n".join(p.text for p in doc.paragraphs if p.text).strip()
+        except Exception as e:
+            raise ValueError(f"Could not read DOCX: {e}")
+    if ext in (".txt", ".md", ".csv"):
+        return data.decode("utf-8", errors="replace").strip()
+    raise ValueError(f"Unsupported file type: {ext}. Supported: PDF, DOCX, TXT, MD, CSV")
 
 
 def get_doc_count() -> dict[str, int]:
