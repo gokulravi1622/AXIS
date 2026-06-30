@@ -135,7 +135,7 @@ export default function Onboarding({ token, orgName, onComplete }) {
           <div style={{ fontSize: 13.5, color: 'var(--text3)', marginTop: 6, textAlign: 'center', maxWidth: 440, lineHeight: 1.6 }}>
             {step === 'select'
               ? 'Which tools should AXIS pull knowledge from? Pick any — you can add more later.'
-              : ‘Enter your details for each tool and connect it. Skip any you\’re not ready for yet.’}
+              : "Enter your details for each tool and connect it. Skip any you’re not ready for yet."}
           </div>
         </div>
 
