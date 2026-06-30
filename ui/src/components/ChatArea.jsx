@@ -149,7 +149,7 @@ function EmptyState({ onSuggest }) {
         </div>
 
         <p style={{ fontSize: 'clamp(14px, 1.5vw, 16px)', color: 'var(--text2)', maxWidth: 520, lineHeight: 1.65, margin: '0 auto 40px', animation: 'fadeSlideUp 0.5s 0.2s ease both' }}>
-          AXIS searches Jira, Confluence, and internal contributions — then gives you a precise, grounded answer with sources.
+          AXIS searches all your connected tools and gives you a clear answer with clickable sources.
         </p>
 
         {/* Stats strip */}

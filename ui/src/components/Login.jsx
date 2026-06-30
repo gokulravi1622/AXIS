@@ -11,16 +11,16 @@ const post = (path, body) =>
 const FEATURES = [
   { iconPaths: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'], title: 'Understands context, not just keywords', color: '#6366F1',
     desc: 'Ask follow-up questions, reference earlier answers, and get responses that actually understand what you mean. Not just keyword matches.' },
-  { iconPaths: ['M12 2L2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'], title: 'Hybrid search, re-ranked for relevance', color: '#8B5CF6',
-    desc: 'Combines vector similarity with BM25 keyword matching and a cross-encoder re-ranker to surface the most relevant sources every time.' },
+  { iconPaths: ['M12 2L2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'], title: 'Smarter search, better results', color: '#8B5CF6',
+    desc: 'Uses AI and keyword search together to find the most useful sources every time — not just the ones that match your exact wording.' },
   { iconPaths: ['M9 17H7a5 5 0 0 1 0-10h2', 'M15 7h2a5 5 0 0 1 0 10h-2', 'M11 12h2'], title: 'Every answer is sourced', color: '#3B82F6',
     desc: 'Answers link back to the exact ticket, page, or doc they came from. No guessing, no fabrication.' },
   { iconPaths: ['M3 17l5-5 4 4 8-8', 'M17 7h4v4'], title: 'Gets better with feedback', color: '#10B981',
-    desc: 'Thumbs-up and down ratings directly tune the retrieval model. The more your team rates, the sharper the results get.' },
+    desc: 'Rate answers with thumbs up or down. The more your team rates, the better the results get over time.' },
   { iconPaths: ['M23 4v6h-6', 'M1 20v-6h6', 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10', 'M1 14l4.64 4.36A9 9 0 0 0 20.49 15'], title: 'One-click data sync', color: '#F59E0B',
     desc: 'Connect Jira, Confluence, Slack, Notion, and Google Drive via OAuth. AXIS re-indexes every 6 hours so answers stay current.' },
   { iconPaths: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'], title: 'Private by design', color: '#EC4899',
-    desc: 'Per-org vector stores, OAuth-scoped access, and encrypted credentials. Your data never touches anyone else\'s model.' },
+    desc: 'Each team has its own private data store. Your docs are never shared with or visible to anyone else.' },
 ]
 
 const STEP_ICON_PATHS = [
@@ -30,9 +30,9 @@ const STEP_ICON_PATHS = [
 ]
 
 const STEPS = [
-  { n: '01', title: 'Connect your data sources', desc: 'One-click OAuth for Jira, Confluence, Slack, Notion, and Google Drive. AXIS ingests and indexes your content automatically. No setup scripts.' },
-  { n: '02', title: 'Ask anything, in plain English', desc: 'Type your question naturally. AXIS runs hybrid search across all connected tools at once and re-ranks results by relevance to your query.' },
-  { n: '03', title: 'Get a cited, sourced answer', desc: 'Receive a clean, markdown-formatted answer drawn from your actual data, with clickable sources and feedback-driven improvement over time.' },
+  { n: '01', title: 'Connect your tools', desc: 'Connect Jira, Confluence, Slack, Notion, and Google Drive with one click. AXIS pulls in your content automatically — no scripts needed.' },
+  { n: '02', title: 'Ask anything', desc: 'Type your question naturally. AXIS searches all your connected tools at once and picks the most relevant results.' },
+  { n: '03', title: 'Get a sourced answer', desc: 'Get a clear answer from your real data with clickable sources. Rate answers to help results improve over time.' },
 ]
 
 const INTEGRATIONS = [
@@ -335,7 +335,7 @@ export default function Login({ onAuth, theme, setTheme }) {
         {step === 'credentials' && (
           <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
             <span style={{ fontSize: 12, color: '#10B981' }}>🔒</span>
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>OAuth-secured · no card required · cancel anytime</span>
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>Secure login · no card required · cancel anytime</span>
           </div>
         )}
       </div>
@@ -439,7 +439,7 @@ export default function Login({ onAuth, theme, setTheme }) {
             </h1>
 
             <p className="hero-desc" style={{ fontSize: 18, color: 'var(--text2)', lineHeight: 1.65, margin: '0 0 32px' }}>
-              Connect Jira, Confluence, Slack, Notion, and Google Drive once. Then ask any question in plain English and get a cited answer pulled straight from your actual docs.
+              Connect Jira, Confluence, Slack, Notion, and Google Drive once. Ask any question and get a clear, sourced answer pulled straight from your team's docs.
             </p>
 
             <div className="hero-ctas" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 36 }}>
@@ -472,7 +472,7 @@ export default function Login({ onAuth, theme, setTheme }) {
             <div className="hero-badges" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {[
                 { paths: ['M19 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'], label: 'OAuth-secured' },
-                { paths: ['M4 7h16', 'M4 12h10', 'M4 17h7'], label: 'Dedicated DB per org' },
+                { paths: ['M4 7h16', 'M4 12h10', 'M4 17h7'], label: 'Your own private data' },
                 { paths: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'M22 4L12 14.01l-3-3'], label: 'No card required' },
                 { paths: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'], label: 'Set up in minutes' },
               ].map(b => (
