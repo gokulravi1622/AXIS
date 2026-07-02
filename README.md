@@ -10,7 +10,7 @@ pinned: false
 # AXIS — Centralized Knowledge Layer
 
 > One source of truth. Every team's context, in one place.
-
+                              
 AXIS is a RAG-based (Retrieval-Augmented Generation) knowledge assistant that centralizes documentation from across your organization and makes it queryable through a chat interface. It syncs from **Jira, Confluence, Slack, Notion, and Google Drive**, retrieves the most relevant context for any question, and generates grounded, source-cited answers.
 
 **Live deployment:**
