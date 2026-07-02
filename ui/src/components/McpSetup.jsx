@@ -206,28 +206,48 @@ export default function McpSetup({ token, onClose }) {
                   </>
                 )
               ) : (
-                /* hosted: download bridge + paste config */
+                /* hosted: one-click installer */
                 <>
-                  <StepHead emoji="1️⃣" title="Download the bridge script" sub="Saves a personalised script with your token embedded" />
-                  <BigBtn color="var(--accent)" onClick={downloadBridgeScript}>
-                    ⬇ Download axis_mcp_bridge.py
-                  </BigBtn>
-                  <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
-                    Save it anywhere — e.g. <code style={mono}>~/axis_mcp_bridge.py</code> — and make it executable:<br />
-                    <code style={{ ...mono, display: 'inline-block', marginTop: 4 }}>chmod +x ~/axis_mcp_bridge.py</code>
+                  <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 16 }}>
+                      Downloads a personalised installer. Double-click it — AXIS is added to Claude Desktop automatically.
+                    </div>
+                    <BigBtn color="var(--accent)" onClick={async () => {
+                      try {
+                        const res = await fetch('/api/mcp/installer', {
+                          headers: { Authorization: `Bearer ${token}` },
+                        })
+                        const blob = await res.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = 'Install AXIS MCP.command'
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      } catch {
+                        alert('Download failed — make sure you are signed in.')
+                      }
+                    }}>
+                      <img src="/claude.png" alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
+                      Download Installer for Claude Desktop
+                    </BigBtn>
                   </div>
 
-                  <StepHead emoji="2️⃣" title="Add to claude_desktop_config.json" sub="Mac: ~/Library/Application Support/Claude/" />
-                  <LabeledCopy
-                    label="Config JSON"
-                    text={JSON.stringify({ mcpServers: { axis: { command: 'python3', args: ['~/axis_mcp_bridge.py'] } } }, null, 2)}
-                    copied={copied === 'dtjson'}
-                    onCopy={() => copy(JSON.stringify({ mcpServers: { axis: { command: 'python3', args: ['~/axis_mcp_bridge.py'] } } }, null, 2), 'dtjson')}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12 }}>
+                    {[
+                      { n: '1', text: 'Download the installer above' },
+                      { n: '2', text: 'Double-click "Install AXIS MCP.command"' },
+                      { n: '3', text: 'Restart Claude Desktop (Cmd+Q → reopen)' },
+                    ].map(s => (
+                      <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--accent-text)', flexShrink: 0 }}>{s.n}</span>
+                        <span style={{ fontSize: 13, color: 'var(--text2)' }}>{s.text}</span>
+                      </div>
+                    ))}
+                  </div>
 
-                  <StepHead emoji="3️⃣" title="Restart Claude Desktop" sub="Quit completely (Cmd+Q), then reopen" />
-                  <div style={{ padding: '12px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, color: 'var(--text2)', lineHeight: 1.7 }}>
-                    Then try: <strong style={{ color: 'var(--text1)' }}>"Share my current work context to AXIS"</strong>
+                  <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                    Then try in Claude Desktop: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
                   </div>
                 </>
               )}

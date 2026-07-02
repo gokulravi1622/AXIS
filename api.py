@@ -376,6 +376,64 @@ def download_bridge_script(request: Request, user: dict = Depends(get_current_us
     )
 
 
+@app.get("/api/mcp/installer")
+def download_installer(request: Request, user: dict = Depends(get_current_user)):
+    """Return a macOS .command installer that sets up AXIS MCP in Claude Desktop with one double-click."""
+    from fastapi.responses import Response as _Response
+
+    fresh_token = create_token(user["id"], user["email"])
+    bridge_url = str(request.base_url).rstrip("/") + "/api/mcp/bridge-script"
+
+    script = f'''#!/bin/bash
+set -e
+BRIDGE="$HOME/.axis_mcp_bridge.py"
+CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+TOKEN="{fresh_token}"
+BRIDGE_URL="{bridge_url}"
+
+echo ""
+echo "  Installing AXIS MCP for Claude Desktop..."
+echo ""
+
+# Download the bridge script with embedded token
+curl -fsSL -H "Authorization: Bearer $TOKEN" "$BRIDGE_URL" -o "$BRIDGE"
+chmod +x "$BRIDGE"
+echo "  ✅ Bridge script saved to $BRIDGE"
+
+# Patch claude_desktop_config.json
+python3 - <<\'PYEOF\'
+import json, os, sys
+config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+bridge_path = os.path.expanduser("~/.axis_mcp_bridge.py")
+try:
+    with open(config_path) as f:
+        config = json.load(f)
+except Exception:
+    config = {{}}
+config.setdefault("mcpServers", {{}})["axis"] = {{
+    "command": "python3",
+    "args": [bridge_path],
+}}
+os.makedirs(os.path.dirname(config_path), exist_ok=True)
+with open(config_path, "w") as f:
+    json.dump(config, f, indent=2)
+print("  ✅ Claude Desktop config updated")
+PYEOF
+
+echo ""
+echo "  ✅ Done! Restart Claude Desktop to activate AXIS."
+echo "     (Cmd+Q to quit, then reopen)"
+echo ""
+read -p "  Press Enter to close this window..."
+'''
+
+    return _Response(
+        content=script,
+        media_type="text/plain",
+        headers={"Content-Disposition": 'attachment; filename="Install AXIS MCP.command"'},
+    )
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def _org_payload(org_id) -> dict:
