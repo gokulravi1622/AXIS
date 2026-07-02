@@ -45,7 +45,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 # ── JWT tokens ────────────────────────────────────────────────────────────────
 
-def create_token(user_id: int, email: str) -> str:
+def create_token(user_id: int, email: str, org_id: Optional[int] = None, name: str = "") -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
@@ -53,6 +53,10 @@ def create_token(user_id: int, email: str) -> str:
         "iat": now,
         "exp": now + timedelta(days=TOKEN_TTL_DAYS),
     }
+    if org_id is not None:
+        payload["org_id"] = org_id
+    if name:
+        payload["name"] = name
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
 
@@ -109,7 +113,7 @@ def authenticate(email: str, password: str) -> dict:
         conn.close()
     if not row or not verify_password(password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    return {"id": row["id"], "email": row["email"], "name": row["name"], "org_id": row["org_id"]}
+    return {"id": row["id"], "email": row["email"], "name": row["name"] or "", "org_id": row["org_id"]}
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
@@ -143,7 +147,19 @@ def _user_from_header(authorization: Optional[str]) -> Optional[dict]:
     payload = decode_token(token)
     if not payload:
         return None
-    return get_user_by_id(int(payload["sub"]))
+    user = get_user_by_id(int(payload["sub"]))
+    if user:
+        return user
+    # DB was wiped (e.g. ephemeral HF Spaces restart) but token is still valid —
+    # reconstruct a minimal user dict from the JWT claims so auth keeps working.
+    if payload.get("email"):
+        return {
+            "id": int(payload["sub"]),
+            "email": payload["email"],
+            "name": payload.get("name", payload["email"].split("@")[0]),
+            "org_id": payload.get("org_id"),
+        }
+    return None
 
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:

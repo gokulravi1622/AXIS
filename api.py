@@ -217,7 +217,7 @@ def install_mcp_claude_code(user: dict = Depends(get_current_user)):
     except (FileNotFoundError, ValueError):
         settings = {}
 
-    fresh_token = create_token(user["id"], user["email"])
+    fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
 
     settings.setdefault("mcpServers", {})["axis"] = {
         "type": "http",
@@ -245,7 +245,7 @@ def install_mcp_claude_desktop(user: dict = Depends(get_current_user)):
     import platform
     import stat
 
-    fresh_token = create_token(user["id"], user["email"])
+    fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
 
     # ── Write the bridge script ───────────────────────────────────────────────
     bridge_path = Path.home() / ".axis_mcp_bridge.py"
@@ -317,7 +317,7 @@ def download_bridge_script(request: Request, user: dict = Depends(get_current_us
     """Return a personalised stdio bridge script for Claude Desktop (hosted deployments)."""
     from fastapi.responses import Response as _Response
 
-    fresh_token = create_token(user["id"], user["email"])
+    fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
 
     bridge = (
@@ -381,7 +381,7 @@ def download_installer(request: Request, user: dict = Depends(get_current_user))
     """Return a macOS .command installer that sets up AXIS MCP in Claude Desktop with one double-click."""
     from fastapi.responses import Response as _Response
 
-    fresh_token = create_token(user["id"], user["email"])
+    fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
     bridge_url = str(request.base_url).rstrip("/") + "/api/mcp/bridge-script"
 
     script = f'''#!/bin/bash
@@ -442,7 +442,7 @@ def _org_payload(org_id) -> dict:
 
 
 def _auth_response(user: dict) -> dict:
-    token = create_token(user["id"], user["email"])
+    token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
     return {"token": token, "user": user, "org": _org_payload(user.get("org_id"))}
 
 
