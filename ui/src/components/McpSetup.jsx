@@ -8,6 +8,7 @@ export default function McpSetup({ token, onClose }) {
   const [ngrokUrl, setNgrokUrl] = useState('')
   const [ngrokToken, setNgrokToken] = useState('')
   const [copied, setCopied] = useState('')
+  const [downloadDone, setDownloadDone] = useState(false)
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   const baseUrl = isLocalhost
@@ -52,7 +53,89 @@ export default function McpSetup({ token, onClose }) {
     }
   }
 
-  const switchTab = (t) => { setTab(t); setStep(1); setCcState('idle'); setDesktopState('idle'); setNgrokUrl(''); setNgrokToken(''); setCopied('') }
+  const switchTab = (t) => { setTab(t); setStep(1); setCcState('idle'); setDesktopState('idle'); setNgrokUrl(''); setNgrokToken(''); setCopied(''); setDownloadDone(false) }
+
+  const downloadSetupFile = () => {
+    const origin = window.location.origin
+    const tok = token ?? ''
+
+    const bridgeContent = `#!/usr/bin/env python3
+"""AXIS MCP stdio bridge"""
+import sys, json, ssl, urllib.request
+URL = '${origin}/mcp'
+TOKEN = '${tok}'
+def _ssl_ctx():
+    try:
+        import certifi; return ssl.create_default_context(cafile=certifi.where())
+    except ImportError: pass
+    ctx = ssl.create_default_context()
+    for p in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
+        try: ctx.load_verify_locations(p); return ctx
+        except Exception: pass
+    return ctx
+SSL_CTX = _ssl_ctx()
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try: msg = json.loads(line)
+    except json.JSONDecodeError: continue
+    req = urllib.request.Request(URL, data=json.dumps(msg).encode(),
+        headers={"Content-Type":"application/json","Authorization":f"Bearer {TOKEN}"},
+        method="POST")
+    try:
+        with urllib.request.urlopen(req, context=SSL_CTX, timeout=30) as r:
+            body = r.read()
+            if body.strip():
+                result = json.loads(body)
+                if result: print(json.dumps(result), flush=True)
+    except Exception as e:
+        print(json.dumps({"jsonrpc":"2.0","id":msg.get("id"),"error":{"code":-32603,"message":str(e)}}), flush=True)`
+
+    const configPy = `import json, os
+p = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
+os.makedirs(os.path.dirname(p), exist_ok=True)
+cfg = {}
+if os.path.exists(p):
+    try:
+        with open(p) as f: cfg = json.load(f)
+    except Exception: pass
+cfg.setdefault("mcpServers", {})["axis"] = {"command": "python3", "args": [os.path.expanduser("~/.axis_mcp_bridge.py")]}
+with open(p, "w") as f: json.dump(cfg, f, indent=2)
+print("Config updated")`
+
+    const script = `#!/bin/bash
+BRIDGE="$HOME/.axis_mcp_bridge.py"
+echo ""
+echo "  Installing AXIS MCP bridge..."
+echo ""
+
+cat > "$BRIDGE" << 'AXIS_BRIDGE'
+${bridgeContent}
+AXIS_BRIDGE
+
+chmod +x "$BRIDGE"
+
+python3 - << 'AXIS_CFG'
+${configPy}
+AXIS_CFG
+
+echo ""
+echo "  Done! Restart Claude Desktop to activate AXIS."
+echo "  Quit Claude Desktop (Cmd+Q) and reopen it."
+echo ""
+printf "  Press Enter to close this window... "
+read
+`
+
+    const blob = new Blob([script], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'axis-setup.command'
+    a.click()
+    URL.revokeObjectURL(url)
+    setDownloadDone(true)
+  }
 
   const downloadBridgeScript = async () => {
     try {
@@ -206,36 +289,70 @@ export default function McpSetup({ token, onClose }) {
                   </>
                 )
               ) : (
-                /* hosted: curl one-liner — no file download, no Gatekeeper */
+                /* hosted: download .command file */
                 <>
-                  <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
-                    Run this once in Terminal — it installs AXIS into Claude Desktop automatically.
-                  </div>
-
-                  <LabeledCopy
-                    label="Paste in Terminal"
-                    text={`curl -fsSL -H "Authorization: Bearer ${token ?? ''}" ${window.location.origin}/api/mcp/installer | bash`}
-                    copied={copied === 'installer'}
-                    onCopy={() => copy(`curl -fsSL -H "Authorization: Bearer ${token ?? ''}" ${window.location.origin}/api/mcp/installer | bash`, 'installer')}
-                  />
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10 }}>
-                    {[
-                      'Copy the command above',
-                      'Open Terminal (⌘+Space → "Terminal")',
-                      'Paste and press Enter',
-                      'Restart Claude Desktop (⌘+Q → reopen)',
-                    ].map((s, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--accent-text)', flexShrink: 0 }}>{i + 1}</span>
-                        <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{s}</span>
+                  {!downloadDone ? (
+                    <>
+                      <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
+                        No Terminal needed. Download the setup file — double-click it and it connects AXIS to Claude Desktop automatically.
                       </div>
-                    ))}
-                  </div>
+                      <BigBtn color="var(--accent)" onClick={downloadSetupFile}>
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v9m0 0L4 7m3.5 3L11 7M1 13h13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Download Setup File
+                      </BigBtn>
+                    </>
+                  ) : (
+                    <>
+                      {/* Downloaded banner */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10 }}>
+                        <span style={{ color: '#10B981', fontSize: 15 }}>✓</span>
+                        <span style={{ fontSize: 12.5, color: '#10B981', fontWeight: 600 }}>axis-setup.command downloaded to Downloads</span>
+                      </div>
 
-                  <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
-                    Then try: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
-                  </div>
+                      {/* Step list */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                        {/* Step 1 */}
+                        <SetupStep num={1} done>
+                          File downloaded to <strong style={{ color: 'var(--text1)' }}>~/Downloads</strong>
+                        </SetupStep>
+
+                        {/* Step 2 — right-click visual */}
+                        <SetupStep num={2} warning="Don't double-click — use right-click">
+                          In Finder, <strong style={{ color: 'var(--text1)' }}>right-click</strong> the file → click <strong style={{ color: 'var(--text1)' }}>Open</strong>
+                          <div style={{ marginTop: 8 }}>
+                            <RightClickVisual />
+                          </div>
+                        </SetupStep>
+
+                        {/* Step 3 — Gatekeeper visual */}
+                        <SetupStep num={3}>
+                          macOS shows a security popup — click <strong style={{ color: 'var(--text1)' }}>Open</strong>
+                          <div style={{ marginTop: 8 }}>
+                            <GatekeeperVisual />
+                          </div>
+                        </SetupStep>
+
+                        {/* Step 4 */}
+                        <SetupStep num={4}>
+                          Terminal opens and runs — wait for <strong style={{ color: 'var(--text1)' }}>"Done!"</strong>
+                        </SetupStep>
+
+                        {/* Step 5 */}
+                        <SetupStep num={5}>
+                          Restart Claude Desktop — <strong style={{ color: 'var(--text1)' }}>⌘Q</strong> then reopen
+                        </SetupStep>
+                      </div>
+
+                      <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                        Then try: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
+                      </div>
+
+                      <button onClick={downloadSetupFile} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline', padding: 0, alignSelf: 'center' }}>
+                        Re-download file
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -415,6 +532,93 @@ function Spin({ text }) {
       <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
       {text}
     </span>
+  )
+}
+
+function SetupStep({ num, done, warning, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{
+        width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+        background: done ? 'rgba(16,185,129,0.15)' : 'var(--accent-dim)',
+        border: `1.5px solid ${done ? '#10B981' : 'var(--accent)'}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: done ? 11 : 10, fontWeight: 700,
+        color: done ? '#10B981' : 'var(--accent-text)',
+      }}>
+        {done ? '✓' : num}
+      </span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>{children}</div>
+        {warning && (
+          <div style={{ fontSize: 11, color: '#F59E0B', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>⚠</span> {warning}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RightClickVisual() {
+  return (
+    <div style={{ display: 'inline-block' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+        <span>📄</span>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}>axis-setup.command</span>
+      </div>
+      <div style={{
+        background: 'rgba(40,40,45,0.97)', borderRadius: 7,
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+        padding: '3px 0', minWidth: 148,
+      }}>
+        {[
+          { label: 'Open', highlight: true },
+          { label: 'Open With…', highlight: false },
+          { label: 'Move to Trash', highlight: false },
+          { label: 'Get Info', highlight: false },
+        ].map(({ label, highlight }) => (
+          <div key={label} style={{
+            padding: '5px 14px', fontSize: 11.5,
+            color: highlight ? '#fff' : 'rgba(255,255,255,0.45)',
+            background: highlight ? 'var(--accent)' : 'transparent',
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+          }}>
+            {label}
+            {highlight && <span style={{ fontSize: 9, opacity: 0.8 }}>← click</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GatekeeperVisual() {
+  return (
+    <div style={{
+      background: 'rgba(40,40,45,0.97)', borderRadius: 10,
+      border: '1px solid rgba(255,255,255,0.08)',
+      boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+      padding: '14px 16px',
+    }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 24, flexShrink: 0 }}>🔒</span>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+          <strong style={{ color: '#fff' }}>"axis-setup.command"</strong> cannot be opened because it is from an unidentified developer.
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <div style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.1)', borderRadius: 5, fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: '-apple-system, sans-serif' }}>
+          Cancel
+        </div>
+        <div style={{ padding: '4px 14px', background: 'var(--accent)', borderRadius: 5, fontSize: 11, color: '#fff', fontWeight: 700, fontFamily: '-apple-system, sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}>
+          Open
+          <span style={{ fontSize: 9, opacity: 0.85 }}>← click</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
