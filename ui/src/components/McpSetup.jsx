@@ -289,79 +289,8 @@ read
                   </>
                 )
               ) : (
-                /* hosted: download .command file */
-                <>
-                  {!downloadDone ? (
-                    <>
-                      <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
-                        No Terminal needed. Download the setup file — double-click it and it connects AXIS to Claude Desktop automatically.
-                      </div>
-                      <BigBtn color="var(--accent)" onClick={downloadSetupFile}>
-                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v9m0 0L4 7m3.5 3L11 7M1 13h13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        Download Setup File
-                      </BigBtn>
-                    </>
-                  ) : (
-                    <>
-                      {/* Downloaded banner */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10 }}>
-                        <span style={{ color: '#10B981', fontSize: 15 }}>✓</span>
-                        <span style={{ fontSize: 12.5, color: '#10B981', fontWeight: 600 }}>axis-setup.command downloaded to Downloads</span>
-                      </div>
-
-                      {/* Step list */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-                        {/* Step 1 */}
-                        <SetupStep num={1} done>
-                          File downloaded to <strong style={{ color: 'var(--text1)' }}>~/Downloads</strong>
-                        </SetupStep>
-
-                        {/* Step 2 — right-click visual */}
-                        <SetupStep num={2} warning="Don't double-click — use right-click">
-                          In Finder, <strong style={{ color: 'var(--text1)' }}>right-click</strong> the file → click <strong style={{ color: 'var(--text1)' }}>Open</strong>
-                          <div style={{ marginTop: 8 }}>
-                            <RightClickVisual />
-                          </div>
-                        </SetupStep>
-
-                        {/* Step 3 — macOS blocked warning */}
-                        <SetupStep num={3}>
-                          macOS shows a security warning — click <strong style={{ color: 'var(--text1)' }}>Done</strong>
-                          <div style={{ marginTop: 8 }}>
-                            <BlockedVisual />
-                          </div>
-                        </SetupStep>
-
-                        {/* Step 4 — System Settings */}
-                        <SetupStep num={4}>
-                          Open <strong style={{ color: 'var(--text1)' }}>System Settings</strong> → <strong style={{ color: 'var(--text1)' }}>Privacy &amp; Security</strong> → scroll down → click <strong style={{ color: 'var(--text1)' }}>Open Anyway</strong>
-                          <div style={{ marginTop: 8 }}>
-                            <OpenAnywayVisual />
-                          </div>
-                        </SetupStep>
-
-                        {/* Step 5 */}
-                        <SetupStep num={5}>
-                          Terminal opens and runs — wait for <strong style={{ color: 'var(--text1)' }}>"Done!"</strong>
-                        </SetupStep>
-
-                        {/* Step 6 */}
-                        <SetupStep num={6}>
-                          Restart Claude Desktop — <strong style={{ color: 'var(--text1)' }}>⌘Q</strong> then reopen
-                        </SetupStep>
-                      </div>
-
-                      <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
-                        Then try: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
-                      </div>
-
-                      <button onClick={downloadSetupFile} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline', padding: 0, alignSelf: 'center' }}>
-                        Re-download file
-                      </button>
-                    </>
-                  )}
-                </>
+                /* hosted: curl one-liner with visual Terminal guide */
+                <TerminalGuide token={token} />
               )}
             </div>
           )}
@@ -540,6 +469,162 @@ function Spin({ text }) {
       <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
       {text}
     </span>
+  )
+}
+
+function TerminalGuide({ token }) {
+  const [state, setState] = useState('idle') // idle | copied
+  const cmd = `curl -fsSL -H "Authorization: Bearer ${token ?? ''}" ${window.location.origin}/api/mcp/installer | bash`
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(cmd)
+    setState('copied')
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Copy button */}
+      <button
+        onClick={handleCopy}
+        style={{
+          width: '100%', height: 46, borderRadius: 12, border: 'none', cursor: 'pointer',
+          background: state === 'copied' ? 'rgba(16,185,129,0.15)' : 'var(--accent)',
+          color: state === 'copied' ? '#10B981' : '#fff',
+          fontSize: 14, fontWeight: 700, fontFamily: 'Inter, sans-serif',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          transition: 'all 0.2s',
+          border: state === 'copied' ? '1.5px solid rgba(16,185,129,0.4)' : 'none',
+        }}
+      >
+        {state === 'copied'
+          ? <><span style={{ fontSize: 16 }}>✓</span> Command copied!</>
+          : <><span style={{ fontSize: 15 }}>⚡</span> Copy Setup Command</>}
+      </button>
+
+      {/* Steps */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+        {/* Step 1 */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <StepBadge n={1} done={state === 'copied'} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 6 }}>
+              Click <strong style={{ color: 'var(--text1)' }}>Copy Setup Command</strong> above
+            </div>
+          </div>
+        </div>
+
+        {/* Step 2 — Spotlight */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <StepBadge n={2} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 7 }}>
+              Press <Kbd>⌘</Kbd><Kbd>Space</Kbd> → type <strong style={{ color: 'var(--text1)' }}>Terminal</strong> → press <Kbd>↵</Kbd>
+            </div>
+            <SpotlightVisual />
+          </div>
+        </div>
+
+        {/* Step 3 — Paste */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <StepBadge n={3} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 7 }}>
+              Press <Kbd>⌘</Kbd><Kbd>V</Kbd> to paste → press <Kbd>↵</Kbd>
+            </div>
+            <TerminalVisual />
+          </div>
+        </div>
+
+        {/* Step 4 */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <StepBadge n={4} />
+          <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>
+            Restart Claude Desktop — <Kbd>⌘</Kbd><Kbd>Q</Kbd> then reopen
+          </div>
+        </div>
+
+      </div>
+
+      <div style={{ padding: '9px 13px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 9, fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.5 }}>
+        Then try: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
+      </div>
+    </div>
+  )
+}
+
+function StepBadge({ n, done }) {
+  return (
+    <span style={{
+      width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+      background: done ? 'rgba(16,185,129,0.12)' : 'var(--accent-dim)',
+      border: `1.5px solid ${done ? '#10B981' : 'var(--accent)'}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: done ? 10 : 10, fontWeight: 700,
+      color: done ? '#10B981' : 'var(--accent-text)',
+    }}>
+      {done ? '✓' : n}
+    </span>
+  )
+}
+
+function Kbd({ children }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      minWidth: 20, height: 18, padding: '0 5px',
+      background: 'var(--surface2)', border: '1px solid var(--border)',
+      borderRadius: 4, fontSize: 10.5, fontWeight: 600,
+      color: 'var(--text1)', fontFamily: '-apple-system, sans-serif',
+      verticalAlign: 'middle', margin: '0 1px',
+    }}>
+      {children}
+    </span>
+  )
+}
+
+function SpotlightVisual() {
+  return (
+    <div style={{
+      background: 'rgba(30,30,35,0.95)', borderRadius: 10,
+      border: '1px solid rgba(255,255,255,0.08)',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+      overflow: 'hidden',
+    }}>
+      {/* Search bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <span style={{ fontSize: 12, opacity: 0.4 }}>🔍</span>
+        <span style={{ fontSize: 12, color: '#fff', fontFamily: '-apple-system, sans-serif', flex: 1 }}>
+          Terminal<span style={{ borderRight: '1.5px solid var(--accent)', marginLeft: 1 }}>&nbsp;</span>
+        </span>
+      </div>
+      {/* Result */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 12px', background: 'var(--accent)', opacity: 0.9 }}>
+        <span style={{ fontSize: 15 }}>🖥️</span>
+        <span style={{ fontSize: 12, color: '#fff', fontWeight: 600, fontFamily: '-apple-system, sans-serif' }}>Terminal</span>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginLeft: 'auto', fontFamily: '-apple-system, sans-serif' }}>press ↵</span>
+      </div>
+    </div>
+  )
+}
+
+function TerminalVisual() {
+  return (
+    <div style={{
+      background: 'rgba(20,20,22,0.98)', borderRadius: 8,
+      border: '1px solid rgba(255,255,255,0.07)',
+      padding: '8px 12px',
+      fontFamily: 'JetBrains Mono, monospace',
+    }}>
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginBottom: 5, fontFamily: '-apple-system, sans-serif' }}>
+        Terminal — bash
+      </div>
+      <div style={{ fontSize: 10.5, color: '#4ADE80', lineHeight: 1.6 }}>
+        <span style={{ color: 'rgba(255,255,255,0.35)' }}>~ $ </span>
+        curl -fsSL -H "Auth…" …/installer | bash
+        <span style={{ borderRight: '1.5px solid #4ADE80', marginLeft: 1 }}>&nbsp;</span>
+      </div>
+    </div>
   )
 }
 
