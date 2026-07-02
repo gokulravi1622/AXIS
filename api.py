@@ -318,7 +318,7 @@ def download_bridge_script(request: Request, user: dict = Depends(get_current_us
     from fastapi.responses import Response as _Response
 
     fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
-    mcp_url = str(request.base_url).rstrip("/") + "/mcp"
+    mcp_url = _public_mcp_url(request)
 
     bridge = (
         '#!/usr/bin/env python3\n'
@@ -376,6 +376,16 @@ def download_bridge_script(request: Request, user: dict = Depends(get_current_us
     )
 
 
+def _public_mcp_url(request: Request) -> str:
+    """Resolve the public-facing MCP URL, honoring X-Forwarded-Proto/Host from Vercel proxy."""
+    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    scheme = proto if proto in ("http", "https") else request.url.scheme
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host", "")).split(",")[0].strip()
+    if not host:
+        host = str(request.base_url).rstrip("/").split("://", 1)[-1]
+    return f"{scheme}://{host}/mcp"
+
+
 @app.get("/api/mcp/installer")
 def download_installer(request: Request, user: dict = Depends(get_current_user)):
     """Return a shell installer that sets up AXIS MCP in Claude Desktop.
@@ -383,7 +393,7 @@ def download_installer(request: Request, user: dict = Depends(get_current_user))
     from fastapi.responses import Response as _Response
 
     fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
-    mcp_url = str(request.base_url).rstrip("/") + "/mcp"
+    mcp_url = _public_mcp_url(request)
 
     # Build bridge script content inline (avoids a second authenticated request)
     bridge_content = (
