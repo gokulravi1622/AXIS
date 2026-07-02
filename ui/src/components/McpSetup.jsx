@@ -325,21 +325,29 @@ read
                           </div>
                         </SetupStep>
 
-                        {/* Step 3 — Gatekeeper visual */}
+                        {/* Step 3 — macOS blocked warning */}
                         <SetupStep num={3}>
-                          macOS shows a security popup — click <strong style={{ color: 'var(--text1)' }}>Open</strong>
+                          macOS shows a security warning — click <strong style={{ color: 'var(--text1)' }}>Done</strong>
                           <div style={{ marginTop: 8 }}>
-                            <GatekeeperVisual />
+                            <BlockedVisual />
                           </div>
                         </SetupStep>
 
-                        {/* Step 4 */}
+                        {/* Step 4 — System Settings */}
                         <SetupStep num={4}>
-                          Terminal opens and runs — wait for <strong style={{ color: 'var(--text1)' }}>"Done!"</strong>
+                          Open <strong style={{ color: 'var(--text1)' }}>System Settings</strong> → <strong style={{ color: 'var(--text1)' }}>Privacy &amp; Security</strong> → scroll down → click <strong style={{ color: 'var(--text1)' }}>Open Anyway</strong>
+                          <div style={{ marginTop: 8 }}>
+                            <OpenAnywayVisual />
+                          </div>
                         </SetupStep>
 
                         {/* Step 5 */}
                         <SetupStep num={5}>
+                          Terminal opens and runs — wait for <strong style={{ color: 'var(--text1)' }}>"Done!"</strong>
+                        </SetupStep>
+
+                        {/* Step 6 */}
+                        <SetupStep num={6}>
                           Restart Claude Desktop — <strong style={{ color: 'var(--text1)' }}>⌘Q</strong> then reopen
                         </SetupStep>
                       </div>
@@ -595,27 +603,53 @@ function RightClickVisual() {
   )
 }
 
-function GatekeeperVisual() {
+function BlockedVisual() {
   return (
     <div style={{
       background: 'rgba(40,40,45,0.97)', borderRadius: 10,
       border: '1px solid rgba(255,255,255,0.08)',
-      boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
-      padding: '14px 16px',
+      boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+      padding: '13px 15px',
     }}>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <span style={{ fontSize: 24, flexShrink: 0 }}>🔒</span>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-          <strong style={{ color: '#fff' }}>"axis-setup.command"</strong> cannot be opened because it is from an unidentified developer.
+      <div style={{ display: 'flex', gap: 10, marginBottom: 11 }}>
+        <span style={{ fontSize: 28, flexShrink: 0 }}>⚠️</span>
+        <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 3 }}>"axis-setup.command" Not Opened</div>
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', lineHeight: 1.45 }}>
+            Apple could not verify it is free of malware.
+          </div>
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <div style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.1)', borderRadius: 5, fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: '-apple-system, sans-serif' }}>
-          Cancel
+        <div style={{ padding: '4px 16px', background: 'var(--accent)', borderRadius: 6, fontSize: 11, color: '#fff', fontWeight: 700, fontFamily: '-apple-system, sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}>
+          Done <span style={{ fontSize: 9, opacity: 0.8 }}>← click</span>
         </div>
-        <div style={{ padding: '4px 14px', background: 'var(--accent)', borderRadius: 5, fontSize: 11, color: '#fff', fontWeight: 700, fontFamily: '-apple-system, sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}>
-          Open
-          <span style={{ fontSize: 9, opacity: 0.85 }}>← click</span>
+        <div style={{ padding: '4px 16px', background: 'rgba(255,255,255,0.08)', borderRadius: 6, fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: '-apple-system, sans-serif' }}>
+          Move to Bin
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OpenAnywayVisual() {
+  return (
+    <div style={{
+      background: 'rgba(40,40,45,0.97)', borderRadius: 10,
+      border: '1px solid rgba(255,255,255,0.08)',
+      boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+      padding: '11px 14px',
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontFamily: '-apple-system, sans-serif' }}>
+        System Settings → Privacy &amp; Security
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(255,255,255,0.05)', borderRadius: 7 }}>
+        <div style={{ fontFamily: '-apple-system, sans-serif' }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>"axis-setup.command" was blocked</div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>from an unidentified developer</div>
+        </div>
+        <div style={{ padding: '4px 12px', background: 'var(--accent)', borderRadius: 6, fontSize: 11, color: '#fff', fontWeight: 700, fontFamily: '-apple-system, sans-serif', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          Open Anyway <span style={{ fontSize: 9, opacity: 0.8 }}>← click</span>
         </div>
       </div>
     </div>
