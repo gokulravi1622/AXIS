@@ -206,48 +206,35 @@ export default function McpSetup({ token, onClose }) {
                   </>
                 )
               ) : (
-                /* hosted: one-click installer */
+                /* hosted: curl one-liner — no file download, no Gatekeeper */
                 <>
-                  <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
-                    <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 16 }}>
-                      Downloads a personalised installer. Double-click it — AXIS is added to Claude Desktop automatically.
-                    </div>
-                    <BigBtn color="var(--accent)" onClick={async () => {
-                      try {
-                        const res = await fetch('/api/mcp/installer', {
-                          headers: { Authorization: `Bearer ${token}` },
-                        })
-                        const blob = await res.blob()
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = 'Install AXIS MCP.command'
-                        a.click()
-                        URL.revokeObjectURL(url)
-                      } catch {
-                        alert('Download failed — make sure you are signed in.')
-                      }
-                    }}>
-                      <img src="/claude.png" alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
-                      Download Installer for Claude Desktop
-                    </BigBtn>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
+                    Run this once in Terminal — it installs AXIS into Claude Desktop automatically.
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12 }}>
+                  <LabeledCopy
+                    label="Paste in Terminal"
+                    text={`curl -fsSL -H "Authorization: Bearer ${token ?? ''}" ${window.location.origin}/api/mcp/installer | bash`}
+                    copied={copied === 'installer'}
+                    onCopy={() => copy(`curl -fsSL -H "Authorization: Bearer ${token ?? ''}" ${window.location.origin}/api/mcp/installer | bash`, 'installer')}
+                  />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10 }}>
                     {[
-                      { n: '1', text: 'Download the installer above' },
-                      { n: '2', text: 'Double-click "Install AXIS MCP.command"' },
-                      { n: '3', text: 'Restart Claude Desktop (Cmd+Q → reopen)' },
-                    ].map(s => (
-                      <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--accent-text)', flexShrink: 0 }}>{s.n}</span>
-                        <span style={{ fontSize: 13, color: 'var(--text2)' }}>{s.text}</span>
+                      'Copy the command above',
+                      'Open Terminal (⌘+Space → "Terminal")',
+                      'Paste and press Enter',
+                      'Restart Claude Desktop (⌘+Q → reopen)',
+                    ].map((s, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--accent-dim)', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--accent-text)', flexShrink: 0 }}>{i + 1}</span>
+                        <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{s}</span>
                       </div>
                     ))}
                   </div>
 
                   <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
-                    Then try in Claude Desktop: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
+                    Then try: <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
                   </div>
                 </>
               )}
