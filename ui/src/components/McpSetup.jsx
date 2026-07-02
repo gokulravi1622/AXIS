@@ -61,33 +61,24 @@ export default function McpSetup({ token, onClose }) {
 
     const bridgeContent = `#!/usr/bin/env python3
 """AXIS MCP stdio bridge"""
-import sys, json, ssl, urllib.request
+import sys, json, subprocess
 URL = '${origin}/mcp'
 TOKEN = '${tok}'
-def _ssl_ctx():
-    try:
-        import certifi; return ssl.create_default_context(cafile=certifi.where())
-    except ImportError: pass
-    ctx = ssl.create_default_context()
-    for p in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
-        try: ctx.load_verify_locations(p); return ctx
-        except Exception: pass
-    return ctx
-SSL_CTX = _ssl_ctx()
 for line in sys.stdin:
     line = line.strip()
     if not line: continue
     try: msg = json.loads(line)
     except json.JSONDecodeError: continue
-    req = urllib.request.Request(URL, data=json.dumps(msg).encode(),
-        headers={"Content-Type":"application/json","Authorization":f"Bearer {TOKEN}"},
-        method="POST")
     try:
-        with urllib.request.urlopen(req, context=SSL_CTX, timeout=30) as r:
-            body = r.read()
-            if body.strip():
-                result = json.loads(body)
-                if result: print(json.dumps(result), flush=True)
+        r = subprocess.run(
+            ['curl', '-s', '-X', 'POST', URL,
+             '-H', 'Content-Type: application/json',
+             '-H', f'Authorization: Bearer {TOKEN}',
+             '-d', json.dumps(msg)],
+            capture_output=True, text=True, timeout=30)
+        if r.stdout.strip():
+            result = json.loads(r.stdout.strip())
+            if result: print(json.dumps(result), flush=True)
     except Exception as e:
         print(json.dumps({"jsonrpc":"2.0","id":msg.get("id"),"error":{"code":-32603,"message":str(e)}}), flush=True)`
 
