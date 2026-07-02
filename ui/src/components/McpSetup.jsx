@@ -206,47 +206,26 @@ export default function McpSetup({ token, onClose }) {
                   </>
                 )
               ) : (
-                /* hosted: one-click deep link + manual fallback */
+                /* hosted: download bridge + paste config */
                 <>
-                  {/* One-click install */}
-                  <div style={{ textAlign: 'center', padding: '6px 0 2px' }}>
-                    <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 14 }}>
-                      Click below — Claude Desktop opens and adds AXIS automatically.
-                    </div>
-                    <BigBtn
-                      color="var(--accent)"
-                      onClick={() => {
-                        const params = new URLSearchParams({
-                          name: 'AXIS',
-                          url: mcpUrl,
-                          type: 'http',
-                          'header_Authorization': `Bearer ${token ?? ''}`,
-                        })
-                        window.location.href = `claude://add-mcp?${params.toString()}`
-                      }}
-                    >
-                      <img src="/claude.png" alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
-                      Add AXIS to Claude Desktop
-                    </BigBtn>
+                  <StepHead emoji="1️⃣" title="Download the bridge script" sub="Saves a personalised script with your token embedded" />
+                  <BigBtn color="var(--accent)" onClick={downloadBridgeScript}>
+                    ⬇ Download axis_mcp_bridge.py
+                  </BigBtn>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+                    Save it anywhere — e.g. <code style={mono}>~/axis_mcp_bridge.py</code> — and make it executable:<br />
+                    <code style={{ ...mono, display: 'inline-block', marginTop: 4 }}>chmod +x ~/axis_mcp_bridge.py</code>
                   </div>
 
-                  {/* Divider */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0' }}>
-                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                    <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>OR MANUALLY</span>
-                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                  </div>
-
-                  {/* Manual fallback — 2 steps, no bridge script */}
-                  <StepHead emoji="1️⃣" title="Paste into claude_desktop_config.json" sub="Mac: ~/Library/Application Support/Claude/" />
+                  <StepHead emoji="2️⃣" title="Add to claude_desktop_config.json" sub="Mac: ~/Library/Application Support/Claude/" />
                   <LabeledCopy
                     label="Config JSON"
-                    text={JSON.stringify({ mcpServers: { axis: { type: 'http', url: mcpUrl, headers: { Authorization: `Bearer ${token ?? ''}` } } } }, null, 2)}
+                    text={JSON.stringify({ mcpServers: { axis: { command: 'python3', args: ['~/axis_mcp_bridge.py'] } } }, null, 2)}
                     copied={copied === 'dtjson'}
-                    onCopy={() => copy(JSON.stringify({ mcpServers: { axis: { type: 'http', url: mcpUrl, headers: { Authorization: `Bearer ${token ?? ''}` } } } }, null, 2), 'dtjson')}
+                    onCopy={() => copy(JSON.stringify({ mcpServers: { axis: { command: 'python3', args: ['~/axis_mcp_bridge.py'] } } }, null, 2), 'dtjson')}
                   />
 
-                  <StepHead emoji="2️⃣" title="Restart Claude Desktop" sub="Quit completely (Cmd+Q), then reopen" />
+                  <StepHead emoji="3️⃣" title="Restart Claude Desktop" sub="Quit completely (Cmd+Q), then reopen" />
                   <div style={{ padding: '12px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, color: 'var(--text2)', lineHeight: 1.7 }}>
                     Then try: <strong style={{ color: 'var(--text1)' }}>"Share my current work context to AXIS"</strong>
                   </div>
