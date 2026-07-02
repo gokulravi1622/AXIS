@@ -378,31 +378,65 @@ def download_bridge_script(request: Request, user: dict = Depends(get_current_us
 
 @app.get("/api/mcp/installer")
 def download_installer(request: Request, user: dict = Depends(get_current_user)):
-    """Return a macOS .command installer that sets up AXIS MCP in Claude Desktop with one double-click."""
+    """Return a shell installer that sets up AXIS MCP in Claude Desktop.
+    The bridge script is embedded directly — no second API call needed."""
     from fastapi.responses import Response as _Response
 
     fresh_token = create_token(user["id"], user["email"], org_id=user.get("org_id"), name=user.get("name", ""))
-    bridge_url = str(request.base_url).rstrip("/") + "/api/mcp/bridge-script"
+    mcp_url = str(request.base_url).rstrip("/") + "/mcp"
+
+    # Build bridge script content inline (avoids a second authenticated request)
+    bridge_content = (
+        '#!/usr/bin/env python3\n'
+        '"""AXIS MCP stdio bridge"""\n'
+        'import sys, json, ssl, urllib.request\n'
+        f'URL = {repr(mcp_url)}\n'
+        f'TOKEN = {repr(fresh_token)}\n'
+        'def _ssl_ctx():\n'
+        '    try:\n'
+        '        import certifi; return ssl.create_default_context(cafile=certifi.where())\n'
+        '    except ImportError: pass\n'
+        '    ctx = ssl.create_default_context()\n'
+        '    for p in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):\n'
+        '        try: ctx.load_verify_locations(p); return ctx\n'
+        '        except Exception: pass\n'
+        '    return ctx\n'
+        'SSL_CTX = _ssl_ctx()\n'
+        'for line in sys.stdin:\n'
+        '    line = line.strip()\n'
+        '    if not line: continue\n'
+        '    try: msg = json.loads(line)\n'
+        '    except json.JSONDecodeError: continue\n'
+        '    req = urllib.request.Request(URL, data=json.dumps(msg).encode(),\n'
+        '        headers={"Content-Type":"application/json","Authorization":f"Bearer {TOKEN}"},\n'
+        '        method="POST")\n'
+        '    try:\n'
+        '        with urllib.request.urlopen(req, context=SSL_CTX, timeout=30) as r:\n'
+        '            body = r.read()\n'
+        '            if body.strip():\n'
+        '                result = json.loads(body)\n'
+        '                if result: print(json.dumps(result), flush=True)\n'
+        '    except Exception as e:\n'
+        '        print(json.dumps({"jsonrpc":"2.0","id":msg.get("id"),"error":{"code":-32603,"message":str(e)}}), flush=True)\n'
+    )
 
     script = f'''#!/bin/bash
 set -e
 BRIDGE="$HOME/.axis_mcp_bridge.py"
-CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-TOKEN="{fresh_token}"
-BRIDGE_URL="{bridge_url}"
 
 echo ""
 echo "  Installing AXIS MCP for Claude Desktop..."
 echo ""
 
-# Download the bridge script with embedded token
-curl -fsSL -H "Authorization: Bearer $TOKEN" "$BRIDGE_URL" -o "$BRIDGE"
+# Write the bridge script directly (no extra download needed)
+cat > "$BRIDGE" << 'BRIDGE_EOF'
+{bridge_content}BRIDGE_EOF
 chmod +x "$BRIDGE"
 echo "  ✅ Bridge script saved to $BRIDGE"
 
 # Patch claude_desktop_config.json
-python3 - <<\'PYEOF\'
-import json, os, sys
+python3 - << 'PYEOF'
+import json, os
 config_path = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 bridge_path = os.path.expanduser("~/.axis_mcp_bridge.py")
 try:
@@ -421,10 +455,8 @@ print("  ✅ Claude Desktop config updated")
 PYEOF
 
 echo ""
-echo "  ✅ Done! Restart Claude Desktop to activate AXIS."
-echo "     (Cmd+Q to quit, then reopen)"
+echo "  ✅ Done! Restart Claude Desktop (Cmd+Q, then reopen)."
 echo ""
-read -p "  Press Enter to close this window..."
 '''
 
     return _Response(
