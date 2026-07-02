@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/mcp",
+      "destination": "https://gokul1622-axis-backend.hf.space/mcp"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://gokul1622-axis-backend.hf.space/api/:path*"
     }
