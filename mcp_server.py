@@ -91,6 +91,29 @@ TOOLS = [
 ]
 
 
+def _track_mcp_connection(authorization: Optional[str]) -> None:
+    """Best-effort: mark this user as connected via Claude Desktop MCP."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return
+    from auth import decode_token
+    from db import get_conn, now_iso
+    payload = decode_token(authorization[7:].strip())
+    if not payload:
+        return
+    try:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "UPDATE users SET mcp_last_seen = ?, mcp_desktop_connected = 1 WHERE id = ?",
+                (now_iso(), int(payload["sub"])),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
 def _auth_user(authorization: Optional[str]) -> dict:
     """Extract and validate the AXIS user from the Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
@@ -132,6 +155,7 @@ def _handle(msg: dict, authorization: Optional[str]) -> Optional[dict]:
 
     try:
         if method == "initialize":
+            _track_mcp_connection(authorization)
             return _ok(msg_id, {
                 "protocolVersion": MCP_VERSION,
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},

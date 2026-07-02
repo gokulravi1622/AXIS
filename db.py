@@ -139,6 +139,10 @@ def init_db() -> None:
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
             if "org_id" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN org_id INTEGER")
+            if "mcp_last_seen" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN mcp_last_seen TEXT")
+            if "mcp_desktop_connected" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN mcp_desktop_connected INTEGER DEFAULT 0")
             mcols = [r["name"] for r in conn.execute("PRAGMA table_info(messages)").fetchall()]
             if "conversation_id" not in mcols:
                 conn.execute("ALTER TABLE messages ADD COLUMN conversation_id INTEGER")

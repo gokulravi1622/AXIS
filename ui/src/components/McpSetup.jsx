@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function McpSetup({ token, onClose }) {
   const [tab, setTab] = useState('code')          // 'code' | 'desktop' | 'web'
@@ -9,6 +9,26 @@ export default function McpSetup({ token, onClose }) {
   const [ngrokToken, setNgrokToken] = useState('')
   const [copied, setCopied] = useState('')
   const [downloadDone, setDownloadDone] = useState(false)
+  const [mcpStatus, setMcpStatus] = useState(null) // null | {connected, last_seen}
+  const [disconnecting, setDisconnecting] = useState(false)
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/mcp/status', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => d && setMcpStatus(d))
+      .catch(() => {})
+  }, [token])
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await fetch('/api/mcp/disconnect', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+      setMcpStatus({ connected: false })
+    } finally {
+      setDisconnecting(false)
+    }
+  }
 
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   const baseUrl = isLocalhost
@@ -280,8 +300,25 @@ read
                   </>
                 )
               ) : (
-                /* hosted: curl one-liner with visual Terminal guide */
-                <TerminalGuide token={token} />
+                /* hosted: show connection status + setup guide */
+                <>
+                  {mcpStatus?.connected && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block', boxShadow: '0 0 6px #10B981' }} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#10B981' }}>Connected to Claude Desktop</span>
+                      </div>
+                      <button
+                        onClick={handleDisconnect}
+                        disabled={disconnecting}
+                        style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                      >
+                        {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                      </button>
+                    </div>
+                  )}
+                  <TerminalGuide token={token} />
+                </>
               )}
             </div>
           )}

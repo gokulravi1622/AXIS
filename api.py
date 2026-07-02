@@ -1299,3 +1299,35 @@ def get_notifications(user: dict = Depends(get_current_user)):
 def mark_notifs_read(user: dict = Depends(get_current_user)):
     mark_notifications_read(user["email"])
     return {"ok": True}
+
+
+@app.get("/api/mcp/status")
+def mcp_status(user: dict = Depends(get_current_user)):
+    from db import get_conn
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT mcp_last_seen, mcp_desktop_connected FROM users WHERE id = ?",
+            (user["id"],),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return {"connected": False}
+    connected = bool(row["mcp_desktop_connected"])
+    return {"connected": connected, "last_seen": row["mcp_last_seen"]}
+
+
+@app.post("/api/mcp/disconnect")
+def mcp_disconnect(user: dict = Depends(get_current_user)):
+    from db import get_conn
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE users SET mcp_desktop_connected = 0, mcp_last_seen = NULL WHERE id = ?",
+            (user["id"],),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
