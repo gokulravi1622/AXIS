@@ -123,6 +123,17 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_user_by_email(email: str) -> Optional[dict]:
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT id, email, name, org_id FROM users WHERE email = ?", (email.strip().lower(),)
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
 # ── FastAPI dependencies ──────────────────────────────────────────────────────
 
 def _user_from_header(authorization: Optional[str]) -> Optional[dict]:

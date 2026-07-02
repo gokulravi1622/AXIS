@@ -3,56 +3,106 @@
     "id": "cs_001",
     "team": "Client Success",
     "title": "Client Onboarding Process Overview",
-    "content": "New client onboarding takes 60–90 days and covers six workstreams: Actions (configuring health task catalog for the client), Branding (logo, color scheme, app customization), Data Files (eligibility file format and SFTP setup), Earning Cap (configuring per-member reward limits per contract), Redemptions (enabling reward redemption channels — PrizeOut, sweepstakes, retail), and Reporting (setting up client-specific LENS dashboard views). Each workstream has a milestone tracked in the Implementation Jira board. The Implementation Director owns the overall timeline.",
-    "tags": ["onboarding", "implementation", "60-90-days", "client", "milestones"]
+    "content": "New client onboarding takes 60\u201390 days and covers six workstreams: Actions (configuring health task catalog for the client), Branding (logo, color scheme, app customization), Data Files (eligibility file format and SFTP setup), Earning Cap (configuring per-member reward limits per contract), Redemptions (enabling reward redemption channels \u2014 PrizeOut, sweepstakes, retail), and Reporting (setting up client-specific LENS dashboard views). Each workstream has a milestone tracked in the Implementation Jira board. The Implementation Director owns the overall timeline.",
+    "tags": [
+      "onboarding",
+      "implementation",
+      "60-90-days",
+      "client",
+      "milestones"
+    ]
   },
   {
     "id": "cs_002",
     "team": "Client Success",
     "title": "Client Health Score Framework",
-    "content": "Each strategic client is assigned a quarterly health score (Green / Yellow / Red). Inputs: Active Member Rate (target >40%), Reward Attach Rate (target >60%), Redemption Rate (target >30%), Case Volume Trend (increasing = negative signal), and Renewal Status (12+ months out = Green, 6–12 = Yellow, <6 = Red). CS Executives review health scores monthly. A Yellow score triggers a check-in call. A Red score triggers an executive escalation plan within 5 business days.",
-    "tags": ["health-score", "client", "green", "yellow", "red", "renewal"]
+    "content": "Each strategic client is assigned a quarterly health score (Green / Yellow / Red). Inputs: Active Member Rate (target >40%), Reward Attach Rate (target >60%), Redemption Rate (target >30%), Case Volume Trend (increasing = negative signal), and Renewal Status (12+ months out = Green, 6\u201312 = Yellow, <6 = Red). CS Executives review health scores monthly. A Yellow score triggers a check-in call. A Red score triggers an executive escalation plan within 5 business days.",
+    "tags": [
+      "health-score",
+      "client",
+      "green",
+      "yellow",
+      "red",
+      "renewal"
+    ]
   },
   {
     "id": "cs_003",
     "team": "Client Success",
     "title": "Renewal Process and Timeline",
-    "content": "Contract renewals are initiated 12 months before expiry. Steps: 1) CS Executive schedules Executive Business Review (EBR) with client — 12 months out. 2) Legal drafts renewal SOW — 9 months out. 3) Pricing review with finance — 8 months out. 4) Client signs or negotiates — 6 months out. 5) Countersigned contract stored in the Contracts SharePoint folder. 6) CRM Account record updated with new contract dates. Renewals going past the 6-month mark without signature are escalated to the VP of Client Success.",
-    "tags": ["renewal", "contract", "ebr", "sow", "cs", "timeline"]
+    "content": "Contract renewals are initiated 12 months before expiry. Steps: 1) CS Executive schedules Executive Business Review (EBR) with client \u2014 12 months out. 2) Legal drafts renewal SOW \u2014 9 months out. 3) Pricing review with finance \u2014 8 months out. 4) Client signs or negotiates \u2014 6 months out. 5) Countersigned contract stored in the Contracts SharePoint folder. 6) CRM Account record updated with new contract dates. Renewals going past the 6-month mark without signature are escalated to the VP of Client Success.",
+    "tags": [
+      "renewal",
+      "contract",
+      "ebr",
+      "sow",
+      "cs",
+      "timeline"
+    ]
   },
   {
     "id": "cs_004",
     "team": "Client Success",
-    "title": "Statement of Work (SOW) — Standard Commitments",
+    "title": "Statement of Work (SOW) \u2014 Standard Commitments",
     "content": "Standard SOW commitments included in all client contracts: 99.9% platform uptime SLA (measured monthly, excluding planned maintenance), T1 case resolution within 1 business day, T2 case resolution within 3 business days, monthly performance reporting delivered by the 10th of the following month, annual Executive Business Review, and data file processing within 4 hours of SFTP delivery. Custom commitments (e.g., dedicated implementation manager, custom reporting) are noted in the SOW Addendum and tracked in the client's CRM Account record.",
-    "tags": ["sow", "commitments", "sla", "uptime", "reporting"]
+    "tags": [
+      "sow",
+      "commitments",
+      "sla",
+      "uptime",
+      "reporting"
+    ]
   },
   {
     "id": "cs_005",
     "team": "Client Success",
     "title": "Executive Business Review (EBR) Template",
     "content": "The EBR is a quarterly or annual review with client leadership. Standard agenda: Platform performance vs SLA (uptime, case resolution), member engagement metrics (active rate, attach rate, redemption rate), health action completion trends, upcoming roadmap items relevant to the client, and open issues / risk items. Data for the EBR is pulled from LENS by the CS Executive one week before. The EBR deck template is in the CS SharePoint under Templates > EBR. Always personalize the cover slide with the client's branding.",
-    "tags": ["ebr", "review", "client", "deck", "quarterly"]
+    "tags": [
+      "ebr",
+      "review",
+      "client",
+      "deck",
+      "quarterly"
+    ]
   },
   {
     "id": "cs_006",
     "team": "Client Success",
     "title": "New Client Launch Checklist",
     "content": "Pre-launch checklist (must be complete before go-live): eligibility file received and processed without quarantine errors, all tenant config fields populated and verified, reward earning rules tested end-to-end in staging, card issuance tested for at least 5 synthetic members, LENS dashboard configured and client-accessible, T1 agent training completed and call scripts approved, client communication plan approved (launch email, app store listing). Sign-off required from: Implementation Director, VP Engineering, and CS Executive. Checklist is tracked in the Implementation Jira epic.",
-    "tags": ["launch", "checklist", "go-live", "pre-launch", "signoff"]
+    "tags": [
+      "launch",
+      "checklist",
+      "go-live",
+      "pre-launch",
+      "signoff"
+    ]
   },
   {
     "id": "cs_007",
     "team": "Client Success",
     "title": "Client Escalation Protocol",
     "content": "When a client raises a critical issue (P1 equivalent): 1) CS Executive acknowledges within 1 hour. 2) Creates a Jira escalation ticket linked to the client Account in CRM. 3) Loops in relevant team lead (Engineering, Data, or Ops). 4) Updates client every 2 hours until resolved. 5) Provides root cause summary within 24 hours of resolution. 6) Schedules a debrief call if the issue lasted more than 4 hours. All client escalations are reviewed at the weekly CS leadership meeting.",
-    "tags": ["escalation", "p1", "client", "protocol", "cs"]
+    "tags": [
+      "escalation",
+      "p1",
+      "client",
+      "protocol",
+      "cs"
+    ]
   },
   {
     "id": "cs_008",
     "team": "Client Success",
-    "title": "Implementation Configuration — Earning Cap Setup",
+    "title": "Implementation Configuration \u2014 Earning Cap Setup",
     "content": "The earning cap defines the maximum reward dollars a member can earn per period (monthly or annual) per the client contract. Configured in the tenant_config table field reward_earning_cap_cents and cap_period (monthly/annual). Default cap is $5.00/month unless the SOW specifies otherwise. The Implementation team sets this during onboarding and it requires sign-off from the CS Executive before activation. Changes to earning caps post-launch must go through a change-request process and are logged in the tenant_config_audit table.",
-    "tags": ["earning-cap", "config", "implementation", "tenant", "rewards"]
+    "tags": [
+      "earning-cap",
+      "config",
+      "implementation",
+      "tenant",
+      "rewards"
+    ]
   }
 ]

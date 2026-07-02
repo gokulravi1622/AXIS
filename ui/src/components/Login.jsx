@@ -409,6 +409,12 @@ export default function Login({ onAuth, theme, setTheme }) {
         <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <a href="#features" className="axis-nav-link">Features</a>
           <a href="#how" className="axis-nav-link">How it works</a>
+          <a href="#mcp" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'var(--accent-dim)', border: '1px solid rgba(99,102,241,0.3)', fontSize: 12.5, fontWeight: 700, color: 'var(--accent-text, var(--accent))', textDecoration: 'none', transition: 'background 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.15)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-dim)'}
+          >
+            <img src="/axis-mcp.png" alt="MCP" style={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4 }} /> MCP
+          </a>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => goAuth('login')} style={{ height: 36, padding: '0 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text1)', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s' }}>Sign in</button>
@@ -610,6 +616,71 @@ export default function Login({ onAuth, theme, setTheme }) {
                 <div style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.65 }}>{s.desc}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── MCP Section ── */}
+      <section id="mcp" style={{ padding: '88px 8vw', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div className="axis-reveal" style={{ textAlign: 'center', marginBottom: 56 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: 'var(--accent-text, var(--accent))', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12, padding: '4px 12px', background: 'var(--accent-dim)', borderRadius: 20, border: '1px solid rgba(99,102,241,0.25)' }}>
+              <img src="/axis-mcp.png" alt="MCP" style={{ width: 16, height: 16, objectFit: 'contain', borderRadius: 3 }} /> MCP — Model Context Protocol
+            </div>
+            <h2 style={{ fontSize: 38, fontWeight: 900, color: 'var(--text1)', letterSpacing: '-0.03em', margin: '0 0 14px' }}>Share knowledge without leaving your AI chat</h2>
+            <p style={{ fontSize: 16, color: 'var(--text2)', maxWidth: 560, margin: '0 auto', lineHeight: 1.65 }}>
+              AXIS plugs directly into Claude Code and Claude Desktop. Employees can share context and search the team knowledge base without switching apps.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+            {[
+              {
+                title: 'Claude Code',
+                sub: 'One-click install',
+                desc: 'Automatically writes the MCP config into ~/.claude/settings.json. Type "share my context to AXIS" in any Claude Code session and it posts directly to the knowledge base.',
+                color: '#6366F1',
+              },
+              {
+                title: 'Claude Desktop',
+                sub: 'Works in chat',
+                desc: 'Installs a local bridge so Claude Desktop can call AXIS tools from regular chat — no terminal needed. Engineers share context the same way they talk to Claude.',
+                color: '#8B5CF6',
+              },
+              {
+                title: 'Search from Claude',
+                sub: 'Before you ask a colleague',
+                desc: 'Type "search AXIS for how our auth system works" — Claude queries the team knowledge base and surfaces the most relevant entries your teammates have shared.',
+                color: '#3B82F6',
+              },
+            ].map((card, i) => (
+              <div key={i} className="axis-reveal" style={{ transitionDelay: `${i * 0.1}s`, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '28px 26px', transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 36px rgba(0,0,0,0.15)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = 'var(--border)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 13, background: card.color + '15', border: `1px solid ${card.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img src="/claude.png" alt="Claude" style={{ width: 26, height: 26, objectFit: 'contain' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text1)', letterSpacing: '-0.01em' }}>{card.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--accent-text, var(--accent))', fontWeight: 600 }}>{card.sub}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.65 }}>{card.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="axis-reveal" style={{ marginTop: 40, padding: '22px 28px', background: 'var(--surface)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 20 }}>💬</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)', marginBottom: 3 }}>Try it in Claude</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>"Share my current work context to AXIS" &nbsp;·&nbsp; "Search AXIS for how our payment flow works" &nbsp;·&nbsp; "What has my team documented about Postgres?"</div>
+            </div>
+            <button onClick={() => goAuth('signup')} style={{ height: 38, padding: '0 20px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+              Get started →
+            </button>
           </div>
         </div>
       </section>

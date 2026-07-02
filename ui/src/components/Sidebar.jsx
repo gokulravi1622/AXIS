@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import ContributionModal from './ContributionModal'
+import McpSetup from './McpSetup'
 
 const TEAMS = [
   { id: null, label: 'All Teams', color: 'var(--c-all)' },
@@ -10,6 +12,16 @@ const TEAMS = [
 ]
 
 const TEAM_OPTIONS = TEAMS.filter(t => t.id !== null)
+
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 // [target key, button label] — key matches the count field in the /api/sync response
 const SYNC_SOURCES = [
@@ -34,6 +46,10 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
   const [hoveredConvId, setHoveredConvId] = useState(null)
   const [renamingId, setRenamingId] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [contributions, setContributions] = useState([])
+  const [contribOpen, setContribOpen] = useState(false)
+  const [selectedContribution, setSelectedContribution] = useState(null)
+  const [mcpOpen, setMcpOpen] = useState(false)
 
   useEffect(() => {
     if (!openMenu) return
@@ -55,6 +71,25 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
   }, [token])
 
   useEffect(() => { loadConnections() }, [loadConnections])
+
+  const loadContributions = useCallback(() => {
+    if (!token) return
+    fetch('/api/contributions', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => setContributions(d.contributions || []))
+      .catch(() => {})
+  }, [token])
+
+  useEffect(() => { if (contribOpen) loadContributions() }, [contribOpen, loadContributions])
+
+  const handleDeleteContribution = (id) => {
+    setContributions(prev => prev.filter(c => c.id !== id))
+  }
+
+  const handleUpdateContribution = (updated) => {
+    setContributions(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c))
+    setSelectedContribution(prev => prev ? { ...prev, ...updated } : null)
+  }
 
   // Show only the sources this org connected; if none, fall back to all.
   const connectedKeys = connections.filter(c => c.connected).map(c => c.provider)
@@ -168,7 +203,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
         res = await fetch('/api/contribute', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ team: form.team, title: form.title, content: form.content, author: form.name || 'Anonymous', tags }),
         })
       }
@@ -182,6 +217,7 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         setFormStatus({ ok: true, msg })
         setForm({ team: 'engineering', name: '', title: '', content: '', tags: '' })
         setAttachedFile(null)
+        loadContributions()
       }
     } catch {
       setFormStatus({ ok: false, msg: 'Network error.' })
@@ -377,17 +413,37 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         {/* Data Sync */}
         <div style={sectionLabel}>Data Sync</div>
         <div style={{ padding: '0 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button
-            onClick={onManageConnections}
-            style={{
-              width: '100%', height: 34, borderRadius: 8, border: '1px solid var(--accent)',
-              background: 'var(--accent-dim)', color: 'var(--accent-text, var(--accent))',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
-              marginBottom: 2,
-            }}
-          >
-            + Connect a tool
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={onManageConnections}
+              style={{
+                flex: 1, height: 34, borderRadius: 8, border: '1px solid var(--accent)',
+                background: 'var(--accent-dim)', color: 'var(--accent-text, var(--accent))',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+              }}
+            >
+              + Connect a tool
+            </button>
+            {token && (
+              <button
+                onClick={() => setMcpOpen(true)}
+                title="Connect Claude Code or Claude.ai to AXIS via MCP"
+                style={{
+                  height: 34, padding: '0 10px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'var(--surface2)',
+                  color: 'var(--text3)', fontSize: 12, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  transition: 'border-color 0.15s, color 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent-text)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text3)' }}
+              >
+                <img src="/axis-mcp.png" alt="MCP" style={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 3 }} /> MCP
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {displaySources.map(([target, label, icon]) => (
               <button
@@ -559,6 +615,58 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
             </div>
           </form>
         </div>
+        {/* My Contributions */}
+        {token && (
+          <>
+            <button
+              onClick={() => setContribOpen(o => !o)}
+              style={{
+                ...sectionLabel,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                padding: '0 16px', marginBottom: contribOpen ? 6 : 0,
+              }}
+            >
+              <span>My Contributions {contributions.length > 0 && !contribOpen ? `(${contributions.length})` : ''}</span>
+              <span style={{ fontSize: 9, color: 'var(--text3)' }}>{contribOpen ? '▲' : '▼'}</span>
+            </button>
+            {contribOpen && (
+              <div style={{ padding: '0 8px', marginBottom: 8 }}>
+                {contributions.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 10px', textAlign: 'center' }}>
+                    No contributions yet
+                  </div>
+                ) : (
+                  contributions.map(c => (
+                    <div
+                      key={c.id}
+                      onClick={() => setSelectedContribution(c)}
+                      style={{
+                        padding: '8px 10px', marginBottom: 4,
+                        background: 'var(--surface2)', border: '1px solid var(--border)',
+                        borderRadius: 8, cursor: 'pointer', transition: 'border-color 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.title}>
+                        {c.title}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
+                        <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{c.team}</div>
+                        {c.contributed_at && (
+                          <div style={{ fontSize: 10, color: 'var(--text3)', flexShrink: 0 }}>
+                            {timeAgo(c.contributed_at)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Conversation context menu — rendered at fixed position to escape overflow:hidden */}
@@ -598,6 +706,19 @@ export default function Sidebar({ teamFilter, setTeamFilter, theme, setTheme, on
         @keyframes spin { to { transform: rotate(360deg); } }
         select option { background: var(--surface2); color: var(--text1); }
       `}</style>
+
+      {selectedContribution && (
+        <ContributionModal
+          contribution={selectedContribution}
+          token={token}
+          onClose={() => setSelectedContribution(null)}
+          onUpdated={handleUpdateContribution}
+          onDeleted={handleDeleteContribution}
+        />
+      )}
+      {mcpOpen && token && (
+        <McpSetup token={token} onClose={() => setMcpOpen(false)} />
+      )}
     </div>
   )
 }

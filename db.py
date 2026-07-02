@@ -14,6 +14,7 @@ import json
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional
 
 DB_PATH = Path(os.environ.get("AXIS_DB_FILE", "axis.db"))
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -105,6 +106,29 @@ def init_db() -> None:
             email TEXT PRIMARY KEY, name TEXT NOT NULL, org_name TEXT, password_hash TEXT NOT NULL,
             code TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS context_requests (
+            id {pk},
+            org_id INTEGER NOT NULL,
+            requester_user_id INTEGER NOT NULL,
+            requester_email TEXT NOT NULL,
+            requester_name TEXT NOT NULL,
+            approver_email TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            duration_type TEXT,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL)""",
+        f"""CREATE TABLE IF NOT EXISTS notifications (
+            id {pk},
+            user_email TEXT NOT NULL,
+            type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_email ON notifications(user_email, read)",
+        "CREATE INDEX IF NOT EXISTS idx_ctx_requests_approver ON context_requests(approver_email, status)",
+        "CREATE INDEX IF NOT EXISTS idx_ctx_requests_requester ON context_requests(requester_email, status)",
     ]
     conn = get_conn()
     try:
@@ -479,3 +503,279 @@ def feedback_summary() -> dict:
     finally:
         conn.close()
     return {"up": up, "down": down, "docs_adjusted": boosted}
+
+
+# ── Context Share Requests ─────────────────────────────────────────────────────
+
+def _row_to_dict(row) -> dict:
+    """Convert a sqlite3.Row or psycopg dict_row to a plain dict."""
+    if row is None:
+        return None
+    if hasattr(row, "keys"):
+        return dict(row)
+    return dict(zip(row.keys(), row))
+
+
+def create_context_request(
+    org_id: int,
+    requester_user_id: int,
+    requester_email: str,
+    requester_name: str,
+    approver_email: str,
+    topic: str,
+) -> int:
+    """
+    Create a new context share request and return its id.
+    Raises ValueError if a pending/approved request already exists for the same
+    requester → approver pair within the same org.
+    """
+    conn = get_conn()
+    try:
+        existing = conn.execute(
+            """SELECT id FROM context_requests
+               WHERE org_id = ? AND requester_email = ? AND approver_email = ?
+               AND status IN ('pending', 'approved')""",
+            (org_id, requester_email.strip().lower(), approver_email.strip().lower()),
+        ).fetchone()
+        if existing:
+            raise ValueError("A pending or approved request to this person already exists.")
+        ts = now_iso()
+        row = conn.execute(
+            """INSERT INTO context_requests
+               (org_id, requester_user_id, requester_email, requester_name,
+                approver_email, topic, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?) RETURNING id""",
+            (org_id, requester_user_id, requester_email, requester_name,
+             approver_email.strip().lower(), topic, ts, ts),
+        ).fetchone()
+        conn.commit()
+        return row["id"]
+    finally:
+        conn.close()
+
+
+def get_context_request(request_id: int) -> dict | None:
+    """Fetch a single context request by id."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM context_requests WHERE id = ?", (request_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return _row_to_dict(row)
+
+
+def list_context_requests_for_user(email: str) -> dict:
+    """Return sent and received context requests for the given email."""
+    conn = get_conn()
+    try:
+        sent = conn.execute(
+            "SELECT * FROM context_requests WHERE requester_email = ? ORDER BY created_at DESC",
+            (email.lower(),),
+        ).fetchall()
+        received = conn.execute(
+            "SELECT * FROM context_requests WHERE approver_email = ? ORDER BY created_at DESC",
+            (email.lower(),),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "sent": [_row_to_dict(r) for r in sent],
+        "received": [_row_to_dict(r) for r in received],
+    }
+
+
+def approve_context_request(request_id: int, duration_type: str) -> bool:
+    """
+    Approve a pending context request.
+    duration_type: "24h" → expires 24 hours from now; "session" → expires 8 hours from now.
+    """
+    from datetime import timedelta
+    hours = 24 if duration_type == "24h" else 8
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+    conn = get_conn()
+    try:
+        conn.execute(
+            """UPDATE context_requests
+               SET status = 'approved', duration_type = ?, expires_at = ?, updated_at = ?
+               WHERE id = ? AND status = 'pending'""",
+            (duration_type, expires_at, now_iso(), request_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return True
+
+
+def reject_context_request(request_id: int) -> bool:
+    """Reject a pending context request."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE context_requests SET status = 'rejected', updated_at = ? WHERE id = ?",
+            (now_iso(), request_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return True
+
+
+def revoke_context_request(request_id: int) -> bool:
+    """Revoke an approved context request."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE context_requests SET status = 'revoked', updated_at = ? WHERE id = ?",
+            (now_iso(), request_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return True
+
+
+def create_direct_share(
+    org_id: int,
+    sharer_email: str,
+    sharer_name: str,
+    recipient_user_id: int,
+    recipient_email: str,
+    doc_id: str,
+    title: str,
+    content_preview: str,
+) -> int:
+    """
+    Directly share a contribution with a colleague — creates an auto-approved grant
+    and an in-app notification. Raises ValueError if already shared.
+    Returns the new context_request id.
+    """
+    recipient_email = recipient_email.strip().lower()
+    sharer_email = sharer_email.strip().lower()
+    conn = get_conn()
+    try:
+        existing = conn.execute(
+            """SELECT id FROM context_requests
+               WHERE approver_email = ? AND requester_email = ?
+               AND topic = ? AND status = 'approved' AND duration_type = 'direct'""",
+            (sharer_email, recipient_email, title),
+        ).fetchone()
+        if existing:
+            raise ValueError("You have already shared this with that person.")
+        ts = now_iso()
+        row = conn.execute(
+            """INSERT INTO context_requests
+               (org_id, requester_user_id, requester_email, requester_name,
+                approver_email, topic, status, duration_type, expires_at,
+                created_at, updated_at)
+               VALUES (?, ?, ?, 'Teammate', ?, ?, 'approved', 'direct', NULL, ?, ?) RETURNING id""",
+            (org_id, recipient_user_id, recipient_email, sharer_email, title, ts, ts),
+        ).fetchone()
+        grant_id = row["id"]
+        conn.execute(
+            """INSERT INTO notifications (user_email, type, payload, read, created_at)
+               VALUES (?, 'context_shared', ?, 0, ?)""",
+            (
+                recipient_email,
+                json.dumps({
+                    "sharer_name": sharer_name,
+                    "sharer_email": sharer_email,
+                    "doc_id": doc_id,
+                    "title": title,
+                    "content_preview": content_preview[:300],
+                }),
+                ts,
+            ),
+        )
+        conn.commit()
+        return grant_id
+    finally:
+        conn.close()
+
+
+def get_active_grants_for_email(email: str, org_id: Optional[int] = None) -> list[dict]:
+    """
+    Return approved, non-expired context requests where requester_email = email.
+    Auto-expires any grants whose expires_at has passed.
+    Optionally filters by org_id to prevent cross-org leakage.
+    """
+    conn = get_conn()
+    try:
+        now = now_iso()
+        conn.execute(
+            """UPDATE context_requests
+               SET status = 'expired', updated_at = ?
+               WHERE requester_email = ? AND status = 'approved'
+               AND expires_at IS NOT NULL AND expires_at < ?""",
+            (now, email.lower(), now),
+        )
+        conn.commit()
+        if org_id is not None:
+            rows = conn.execute(
+                """SELECT * FROM context_requests
+                   WHERE requester_email = ? AND org_id = ? AND status = 'approved'
+                   AND (expires_at IS NULL OR expires_at >= ?)""",
+                (email.lower(), org_id, now),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM context_requests
+                   WHERE requester_email = ? AND status = 'approved'
+                   AND (expires_at IS NULL OR expires_at >= ?)""",
+                (email.lower(), now),
+            ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+# ── Notifications ──────────────────────────────────────────────────────────────
+
+def create_notification(user_email: str, ntype: str, payload: dict) -> int:
+    """Create an in-app notification for the given user. Returns the notification id."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            """INSERT INTO notifications (user_email, type, payload, read, created_at)
+               VALUES (?, ?, ?, 0, ?) RETURNING id""",
+            (user_email.lower(), ntype, json.dumps(payload), now_iso()),
+        ).fetchone()
+        conn.commit()
+        return row["id"]
+    finally:
+        conn.close()
+
+
+def list_notifications(user_email: str) -> list[dict]:
+    """Return all notifications for the given user, newest first."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE user_email = ? ORDER BY created_at DESC LIMIT 100",
+            (user_email.lower(),),
+        ).fetchall()
+    finally:
+        conn.close()
+    result = []
+    for r in rows:
+        d = _row_to_dict(r)
+        try:
+            d["payload"] = json.loads(d["payload"])
+        except Exception:
+            pass
+        result.append(d)
+    return result
+
+
+def mark_notifications_read(user_email: str) -> None:
+    """Mark all notifications for the given user as read."""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE notifications SET read = 1 WHERE user_email = ?",
+            (user_email.lower(),),
+        )
+        conn.commit()
+    finally:
+        conn.close()

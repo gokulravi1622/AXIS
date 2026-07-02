@@ -4,55 +4,103 @@
     "team": "CRM",
     "title": "CRM Object Model Overview",
     "content": "The CRM platform (Service Cloud) core objects: Account (represents a client organization / sponsor), Contact (members, client staff, and non-member users), Case (support tickets), and Session (voice call, live chat, or messaging transcripts). Accounts have a Type field: Sponsor (payer organization), Tenant (operational entity), or Client (contract holder). Every Case must be linked to a Contact and an Account. Custom fields added by the platform team use the namespace prefix axs__.",
-    "tags": ["crm", "objects", "account", "contact", "case"]
+    "tags": [
+      "crm",
+      "objects",
+      "account",
+      "contact",
+      "case"
+    ]
   },
   {
     "id": "crm_002",
     "team": "CRM",
     "title": "Support Case Tiers and SLAs",
-    "content": "Support cases are triaged into three tiers. Tier 1 (T1): frontline agents handle general inquiries, password resets, balance questions, and card status — target resolution 1 business day. Tier 2 (T2): issue management team handles escalations, eligibility disputes, failed transactions — SLA is 3 business days, ~30% of cases escalate here. Tier 3 (T3): engineering or data team involvement required — no fixed SLA, managed case-by-case. Escalation is triggered by setting Case.Tier__c field and reassigning to the appropriate queue in CRM.",
-    "tags": ["support", "tier1", "tier2", "sla", "escalation"]
+    "content": "Support cases are triaged into three tiers. Tier 1 (T1): frontline agents handle general inquiries, password resets, balance questions, and card status \u2014 target resolution 1 business day. Tier 2 (T2): issue management team handles escalations, eligibility disputes, failed transactions \u2014 SLA is 3 business days, ~30% of cases escalate here. Tier 3 (T3): engineering or data team involvement required \u2014 no fixed SLA, managed case-by-case. Escalation is triggered by setting Case.Tier__c field and reassigning to the appropriate queue in CRM.",
+    "tags": [
+      "support",
+      "tier1",
+      "tier2",
+      "sla",
+      "escalation"
+    ]
   },
   {
     "id": "crm_003",
     "team": "CRM",
     "title": "Member Lookup During Support Calls",
     "content": "When a member calls in, agents look up the member using the Contact search by: phone number, email, or member_id (shown as Member ID on the Contact record). The Contact record shows: current reward balance (synced from data warehouse daily), card status (Active/Suspended/Cancelled), last action completed, and plan type. If balance or card data looks stale (older than 24h), advise the member the system is updating and create a follow-up case. Do not quote specific balances if the sync timestamp is over 24 hours ago.",
-    "tags": ["member-lookup", "agents", "contact", "balance", "card"]
+    "tags": [
+      "member-lookup",
+      "agents",
+      "contact",
+      "balance",
+      "card"
+    ]
   },
   {
     "id": "crm_004",
     "team": "CRM",
     "title": "Case Creation and Required Fields",
-    "content": "All cases require: Contact (linked member or client contact), Account (linked organization), Case Origin (Phone / Chat / Email / Web), Case Reason (dropdown — see approved list), Priority (Low/Medium/High/Critical), and a Description. Cases missing required fields will fail the routing workflow and land in the Unassigned queue. Agents must also log the voice call record linked to the case if the origin is Phone. SLA clock starts when the case status moves from New to In Progress.",
-    "tags": ["case", "required-fields", "routing", "agents", "crm"]
+    "content": "All cases require: Contact (linked member or client contact), Account (linked organization), Case Origin (Phone / Chat / Email / Web), Case Reason (dropdown \u2014 see approved list), Priority (Low/Medium/High/Critical), and a Description. Cases missing required fields will fail the routing workflow and land in the Unassigned queue. Agents must also log the voice call record linked to the case if the origin is Phone. SLA clock starts when the case status moves from New to In Progress.",
+    "tags": [
+      "case",
+      "required-fields",
+      "routing",
+      "agents",
+      "crm"
+    ]
   },
   {
     "id": "crm_005",
     "team": "CRM",
     "title": "Marketing Cloud Campaigns",
-    "content": "Member marketing campaigns are managed in Marketing Cloud (SFMC), separate from Service Cloud. Campaigns are triggered by behavioral segments (e.g., 'member has not completed an action in 30 days', 'reward balance > $20 unused'). Segment data is sourced from the Redshift sync. Campaign types: push notification, email, SMS. Opt-out preferences are stored on the Contact record (Email_Opt_Out, SMS_Opt_Out fields) and must be respected by all campaign sends. Do not manually add members to campaigns — use the segment builder in SFMC.",
-    "tags": ["marketing", "sfmc", "campaigns", "segments", "opt-out"]
+    "content": "Member marketing campaigns are managed in Marketing Cloud (SFMC), separate from Service Cloud. Campaigns are triggered by behavioral segments (e.g., 'member has not completed an action in 30 days', 'reward balance > $20 unused'). Segment data is sourced from the Redshift sync. Campaign types: push notification, email, SMS. Opt-out preferences are stored on the Contact record (Email_Opt_Out, SMS_Opt_Out fields) and must be respected by all campaign sends. Do not manually add members to campaigns \u2014 use the segment builder in SFMC.",
+    "tags": [
+      "marketing",
+      "sfmc",
+      "campaigns",
+      "segments",
+      "opt-out"
+    ]
   },
   {
     "id": "crm_006",
     "team": "CRM",
     "title": "Client Account Management",
-    "content": "Client accounts in CRM hold: contract start/end dates, contracted PMPM rate, renewal status, primary client contact, and implementation status. The Client Success team owns Account records for strategic clients. The Implementation team owns the Implementation_Status__c field and associated milestone records during onboarding. Sales activity (if any) is tracked via Tasks and Notes on the Account — there is no formal Opportunities pipeline in the current CRM configuration. Account health score is manually updated quarterly by the CS Executive.",
-    "tags": ["client", "account", "contract", "cs", "renewal"]
+    "content": "Client accounts in CRM hold: contract start/end dates, contracted PMPM rate, renewal status, primary client contact, and implementation status. The Client Success team owns Account records for strategic clients. The Implementation team owns the Implementation_Status__c field and associated milestone records during onboarding. Sales activity (if any) is tracked via Tasks and Notes on the Account \u2014 there is no formal Opportunities pipeline in the current CRM configuration. Account health score is manually updated quarterly by the CS Executive.",
+    "tags": [
+      "client",
+      "account",
+      "contract",
+      "cs",
+      "renewal"
+    ]
   },
   {
     "id": "crm_007",
     "team": "CRM",
     "title": "Merchant Network and Benefits Lookup",
-    "content": "Agents handling benefits card questions can look up approved merchant categories and balances via the APL (Approved Products List) lookup tool, accessible from the Case record sidebar under 'Benefits Tools'. The APL shows which merchant categories are enabled for the member's plan and current available balance by category (e.g., OTC, Dental, Vision, Grocery). This data is pulled in real-time from the card processor. If the APL tool errors, escalate to T2 — do not attempt to quote benefit balances from memory.",
-    "tags": ["benefits", "apl", "merchant", "card", "agents"]
+    "content": "Agents handling benefits card questions can look up approved merchant categories and balances via the APL (Approved Products List) lookup tool, accessible from the Case record sidebar under 'Benefits Tools'. The APL shows which merchant categories are enabled for the member's plan and current available balance by category (e.g., OTC, Dental, Vision, Grocery). This data is pulled in real-time from the card processor. If the APL tool errors, escalate to T2 \u2014 do not attempt to quote benefit balances from memory.",
+    "tags": [
+      "benefits",
+      "apl",
+      "merchant",
+      "card",
+      "agents"
+    ]
   },
   {
     "id": "crm_008",
     "team": "CRM",
     "title": "Voice and Chat Session Logging",
-    "content": "All member interactions must be logged in CRM. Voice calls: the telephony system auto-creates a Call record linked to the agent. Agents must manually link the call to the relevant Contact and Case before ending the session. Live chat and messaging sessions are auto-logged via the Service Cloud integration and linked to Contact on session close. Unlinked sessions appear in the Unlinked Sessions report — agents must clear their unlinked sessions weekly. Session recordings are retained for 90 days per compliance policy.",
-    "tags": ["voice", "chat", "logging", "compliance", "sessions"]
+    "content": "All member interactions must be logged in CRM. Voice calls: the telephony system auto-creates a Call record linked to the agent. Agents must manually link the call to the relevant Contact and Case before ending the session. Live chat and messaging sessions are auto-logged via the Service Cloud integration and linked to Contact on session close. Unlinked sessions appear in the Unlinked Sessions report \u2014 agents must clear their unlinked sessions weekly. Session recordings are retained for 90 days per compliance policy.",
+    "tags": [
+      "voice",
+      "chat",
+      "logging",
+      "compliance",
+      "sessions"
+    ]
   }
 ]

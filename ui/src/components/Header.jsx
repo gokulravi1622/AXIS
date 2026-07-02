@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import NotificationsPanel from './NotificationsPanel'
 
 function LogoutModal({ onConfirm, onCancel }) {
   return (
@@ -58,11 +59,29 @@ const TEAM_META = {
   product: { label: 'Product', color: 'var(--c-prod)' },
 }
 
-export default function Header({ teamFilter, user, onLogout, theme, setTheme }) {
+function BellIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9 1.5C9 1.5 5.25 3 5.25 8.25V12L3.75 13.5H14.25L12.75 12V8.25C12.75 3 9 1.5 9 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7.5 13.5C7.5 14.3284 8.17157 15 9 15C9.82843 15 10.5 14.3284 10.5 13.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export default function Header({ teamFilter, user, onLogout, theme, setTheme, notifications, requests, token, onNotifAction }) {
   const key = teamFilter === null ? 'null' : teamFilter
   const meta = TEAM_META[key] || TEAM_META['null']
   const initial = user?.name?.trim()?.[0]?.toUpperCase() || '?'
   const [showModal, setShowModal] = useState(false)
+  const [showNotifPanel, setShowNotifPanel] = useState(false)
+
+  const unreadCount = (notifications || []).filter(n => !n.read).length
+  const pendingRequests = (requests?.received || []).filter(r => r.status === 'pending').length
+  const badgeCount = unreadCount + pendingRequests
+
+  const handleNotifAction = () => {
+    onNotifAction?.()
+  }
 
   return (
     <div style={{
@@ -116,6 +135,37 @@ export default function Header({ teamFilter, user, onLogout, theme, setTheme }) 
           >
             <img src={theme === 'dark' ? '/day-mode.png' : '/dark.png'} alt="Toggle theme" style={{ width: 18, height: 18, objectFit: 'contain' }} />
           </button>
+
+          {/* Notification Bell */}
+          <button
+            onClick={() => setShowNotifPanel(true)}
+            title="Notifications"
+            aria-label="Open notifications"
+            style={{
+              width: 34, height: 34, borderRadius: 9,
+              border: `1px solid ${showNotifPanel ? 'var(--accent)' : 'var(--border)'}`,
+              background: showNotifPanel ? 'var(--accent-dim)' : 'transparent',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text2)',
+              transition: 'border-color 0.15s, background 0.15s',
+              position: 'relative',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--text1)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = showNotifPanel ? 'var(--accent)' : 'var(--border)'; e.currentTarget.style.color = 'var(--text2)' }}
+          >
+            <BellIcon />
+            {badgeCount > 0 && (
+              <span style={{
+                position: 'absolute', top: 4, right: 4,
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#EF4444',
+                border: '1.5px solid var(--surface)',
+                display: 'block',
+              }} />
+            )}
+          </button>
+
           <button
             onClick={() => setShowModal(true)}
             title="Log out"
@@ -139,6 +189,15 @@ export default function Header({ teamFilter, user, onLogout, theme, setTheme }) 
           onCancel={() => setShowModal(false)}
         />
       )}
+
+      <NotificationsPanel
+        open={showNotifPanel}
+        onClose={() => setShowNotifPanel(false)}
+        notifications={notifications || []}
+        requests={requests || { sent: [], received: [] }}
+        token={token}
+        onAction={handleNotifAction}
+      />
     </div>
   )
 }

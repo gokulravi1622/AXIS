@@ -45,20 +45,21 @@ TEAM_ICONS = {
     "Product":          "🧭",
 }
 
-SYSTEM_PROMPT = """You are AXIS, a centralized knowledge assistant for TechCorp.
-You have access to internal documentation from five teams: Engineering, Data, CRM, Client Success, and Product.
+SYSTEM_PROMPT = """You are AXIS, an internal knowledge assistant. You answer ONLY from the exact content of the context documents given to you.
 
-Your job is to give accurate, grounded answers based ONLY on the context provided.
-If the context does not contain enough information to answer, say so clearly — do not guess or hallucinate.
+ABSOLUTE RULES:
+1. Your training knowledge does not exist. Never use it.
+2. Read the context documents carefully. If they do not contain a direct, specific answer to the question asked, output ONLY this sentence — word for word, with NO source line, no asterisks, nothing before or after it:
+   AXIS does not have this information in its knowledge base.
+3. Do NOT say "however", "based on", "it seems", "typically", "generally", or anything that draws on knowledge outside the context.
+4. Do NOT summarize a tangentially-related document as a partial answer. If the question is not directly answered, use Rule 2.
 
-When answering follow-up questions, use the conversation history to understand context (e.g. 'it', 'that feature', 'the issue above' refer to earlier messages).
+When the context directly answers the question:
+- Be clear, direct, concise (under 200 words)
+- Use markdown: **bold** for key terms, `code` for commands/values, bullet lists for steps
+- End with *Source: [Team] — [Document title]*
 
-How to write your answers:
-- Write like a helpful human colleague — clear, direct, and practical
-- Use markdown formatting: **bold** for key terms, `code` for technical values/commands, bullet lists for multiple items, numbered lists for steps
-- Use ## headings only when the answer has clearly distinct sections
-- Keep answers concise — most should be under 200 words
-- End with a brief italic note like *Source: [Team] — [Document title]*
+For follow-up questions, use conversation history to resolve "it", "that", "the issue above" etc.
 """
 
 
@@ -125,6 +126,48 @@ def refresh_doc_scores():
     _doc_scores = None
 
 
+# ── Enriched metadata index ───────────────────────────────────────────────────
+_enriched_index: dict | None = None
+
+
+def _get_enriched_index() -> dict:
+    global _enriched_index
+    if _enriched_index is None:
+        _enriched_index = {}
+        data_dir = Path(os.environ.get("AXIS_DATA_DIR", str(Path(__file__).parent / "data")))
+        import json as _json
+        for fname in [
+            "engineering_docs.json", "data_team_docs.json", "crm_docs.json",
+            "client_success_docs.json", "product_team_docs.json",
+        ]:
+            try:
+                for doc in _json.load(open(data_dir / fname)):
+                    if doc.get("enriched"):
+                        key = (doc.get("team", "").lower(), doc.get("title", "").lower())
+                        _enriched_index[key] = doc["enriched"]
+            except Exception:
+                pass
+    return _enriched_index
+
+
+def refresh_enriched_index():
+    """Drop the enriched cache so next query re-reads from JSON files."""
+    global _enriched_index
+    _enriched_index = None
+
+
+def _attach_enriched(chunks: list[dict]) -> list[dict]:
+    """For contributed chunks, look up and attach their enriched metadata."""
+    index = _get_enriched_index()
+    for chunk in chunks:
+        if chunk.get("source") == "contributed" and not chunk.get("enriched"):
+            key = (chunk.get("team", "").lower(), chunk.get("title", "").lower())
+            enriched = index.get(key)
+            if enriched:
+                chunk["enriched"] = enriched
+    return chunks
+
+
 # ── Retrieve ──────────────────────────────────────────────────────────────────
 def _norm_team(s: str) -> str:
     """Normalize a team name so 'product', 'Product', 'Client Success' all align."""
@@ -162,6 +205,7 @@ def retrieve(query: str, team_filter: Optional[str] = None) -> list[dict]:
             "tags": meta.get("tags", ""),
             "url": meta.get("url", ""),
             "source": meta.get("source", ""),
+            "contributed_by": meta.get("contributed_by", ""),
             "relevance": round((1 - dist) * 100, 1),  # cosine → % relevance
         })
 
@@ -219,12 +263,15 @@ def hybrid_retrieve(query: str, team_filter: Optional[str] = None) -> list[dict]
         if key not in seen:
             seen[key] = c
 
-    return list(seen.values())
+    return _attach_enriched(list(seen.values()))
 
 
 # ── Build context block ───────────────────────────────────────────────────────
 def build_context_block(chunks: list[dict]) -> str:
-    lines = ["Below is the relevant internal documentation context:\n"]
+    lines = [
+        "CONTEXT — these are the ONLY sources you may use to answer. "
+        "Do not use any other knowledge:\n"
+    ]
     for i, chunk in enumerate(chunks, 1):
         icon = TEAM_ICONS.get(chunk["team"], "📄")
         lines.append(
@@ -233,6 +280,11 @@ def build_context_block(chunks: list[dict]) -> str:
         )
         lines.append(chunk["content"])
         lines.append("")
+    lines.append(
+        "RULE: If these sources do not contain a direct answer to the question, "
+        "output ONLY this exact sentence and nothing else: "
+        "AXIS does not have this information in its knowledge base."
+    )
     return "\n".join(lines)
 
 
@@ -312,6 +364,24 @@ def stream_answer(messages: list[dict]):
         yield from stream_ollama(messages)
 
 
+NO_CONTEXT_THRESHOLD = 40  # minimum relevance % to attempt an answer
+
+_REFUSAL_PREFIX = "AXIS does not have this information in its knowledge base."
+
+
+def _clean_answer(text: str) -> str:
+    """Strip any LLM-appended cruft (source lines, hedges) when the model refuses."""
+    stripped = text.strip()
+    if stripped.startswith(_REFUSAL_PREFIX):
+        return _REFUSAL_PREFIX
+    return stripped
+
+NO_CONTEXT_ANSWER = (
+    "AXIS does not have this information in its knowledge base.\n\n"
+    "Try asking a teammate who may have documented it, or contribute the answer yourself so others can find it later."
+)
+
+
 def build_ask_messages(
     question: str,
     chat_history: Optional[list[dict]] = None,
@@ -327,10 +397,28 @@ def build_ask_messages(
             retrieval_query = " | ".join(last_msgs[-2:]) + " | " + question
     chunks = hybrid_retrieve(retrieval_query, team_filter=team_filter)
     chunks = rerank(question, chunks)
+
+    # If no chunk clears the relevance threshold, skip the LLM entirely.
+    max_relevance = max((c["relevance"] for c in chunks), default=0)
+    if max_relevance < NO_CONTEXT_THRESHOLD:
+        return None, []  # sentinel: caller must handle None messages
+
     context = build_context_block(chunks)
     messages = list(chat_history or [])
     messages.append({"role": "user", "content": f"{context}\n\nQuestion: {question}"})
     return messages, chunks
+
+
+def build_messages_from_chunks(
+    question: str,
+    chunks: list[dict],
+    chat_history: Optional[list[dict]] = None,
+) -> list[dict]:
+    """Build LLM messages from a pre-supplied list of chunks (e.g. shared context)."""
+    context = build_context_block(chunks)
+    messages = list(chat_history or [])
+    messages.append({"role": "user", "content": f"{context}\n\nQuestion: {question}"})
+    return messages
 
 
 # ── Answer generation backends ───────────────────────────────────────────────
@@ -396,8 +484,12 @@ def ask(
     """
     messages, chunks = build_ask_messages(question, chat_history, team_filter)
 
+    if messages is None:
+        return NO_CONTEXT_ANSWER, []
+
     try:
-        answer = generate_answer(messages)
+        answer = _clean_answer(generate_answer(messages))
+
     except Exception:
         # Graceful degradation: if the model is unavailable (Ollama not running,
         # or the Anthropic key is out of credits) still return the retrieved

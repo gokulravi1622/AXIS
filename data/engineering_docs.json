@@ -104,5 +104,110 @@
     "content": "This is a test context entry submitted from the AXIS UI to verify the Add Context form works end to end.",
     "tags": [],
     "author": "Jira sync test entry"
+  },
+  {
+    "id": "eng_010",
+    "team": "Engineering",
+    "title": "MCP Integration Test \u2014 AXIS connected to Claude Code",
+    "content": "Successfully connected the AXIS MCP server to Claude Code. The /mcp endpoint at localhost:3000 proxies to the FastAPI backend at :8000. Employees can now type share my work context to AXIS in any Claude Code session and it will save directly to the knowledge base. Tested tools: share_to_axis and search_axis both working.",
+    "tags": [
+      "mcp",
+      "integration",
+      "claude-code"
+    ],
+    "author": "Gokul Ravi",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "contributed_at": "2026-07-02T04:35:19.803338+00:00"
+  },
+  {
+    "id": "eng_011",
+    "team": "Engineering",
+    "title": "Founding AI Engineer Job Posting \u2013 Consumer Social Startup (SF)",
+    "content": "## Job Opportunity: Founding AI Engineer\n\n**Company:** Early-stage consumer social startup (unnamed) \u2014 AI-powered friend-matching platform for young people\n**Location:** San Francisco, CA (on-site, full-time)\n**Salary:** $150,000\u2013$200,000 + significant founding equity\n**Visa:** No sponsorship \u2014 must be eligible to work in the US\n\n### About the Role\nOne of the earliest technical hires. The platform runs AI-powered small group hangouts weekly, matching users into compatible groups and handling the full lifecycle (onboarding, profiling, matching, logistics, reminders, follow-ups) via a suite of AI agents. Thousands of users monthly, expanding across US university campuses.\n\n### Key Responsibilities\n- Build a novel social graph from real-world interaction data (millions of data points)\n- Design matching systems using collaborative filtering, graph embeddings, and ranking systems\n- Apply reinforcement learning for real-world personalization\n- Build AI agent experiences across Instagram, iMessage, WhatsApp, TikTok\n- Orchestrate multi-agent systems for full user lifecycle management\n- Integrate third-party APIs and messaging services\n\n### Requirements\n- 0\u20134+ years hands-on AI/ML in production (recommender systems, matching, social graphs preferred)\n- Experience with collaborative filtering, graph embeddings, ranking systems\n- Reinforcement learning experience applied to personalization\n- Familiarity with multi-channel messaging APIs and AI agent frameworks\n- Founding mindset: ships fast, owns problems end-to-end\n\n### Tags\nAI, ML, social graph, matching, recommender systems, multi-agent, RL, consumer, founding engineer",
+    "tags": [
+      "AI",
+      "ML",
+      "social-graph",
+      "matching",
+      "recommender-systems",
+      "multi-agent",
+      "reinforcement-learning",
+      "founding-engineer",
+      "consumer-social",
+      "San-Francisco"
+    ],
+    "author": "Gokul Ravi",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "contributed_at": "2026-07-02T04:05:19.803338+00:00"
+  },
+  {
+    "id": "eng_012",
+    "team": "Engineering",
+    "title": "Fixed Redis session expiry causing silent logouts",
+    "content": "We were seeing intermittent silent logouts in the MemberApp every 24 hours. Investigation showed Redis keys for refresh tokens were expiring at the same time as JWT tokens (both set to 24h). When JWT expired, the refresh token lookup also returned null, forcing full re-auth. Fix: updated Redis TTL for refresh tokens to 30 days. Also added an expiry buffer of 5 minutes. Deployed to prod 2026-06-28.",
+    "tags": [
+      "redis",
+      "auth",
+      "session",
+      "jwt"
+    ],
+    "author": "Gokul",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "enriched": {
+      "type": "Fix",
+      "summary": "Updated Redis TTL for refresh tokens to prevent silent logouts",
+      "flow": {
+        "problem": "Intermittent silent logouts in MemberApp due to Redis keys expiring at the same time as JWT tokens.",
+        "action": "Updated Redis TTL for refresh tokens to 30 days and added an expiry buffer of 5 minutes.",
+        "outcome": "Prevented silent logouts and ensured refresh token lookup returns valid results."
+      },
+      "scope": [
+        "MemberApp",
+        "Redis",
+        "JWT"
+      ]
+    },
+    "contributed_at": "2026-07-02T04:15:19.803338+00:00"
+  },
+  {
+    "id": "eng_013",
+    "team": "Engineering",
+    "title": "Gokul Ravi Resume Tailoring Session \u2014 Job Search Context",
+    "content": "## Candidate: Gokul Ravi\n**Location:** Boston, MA | **Status:** F-1 STEM OPT (3-year extension eligible)\n**Email:** gokulravi.engineer@gmail.com | **Phone:** +1 857-423-5447\n**LinkedIn:** linkedin.com/in/gokul-ravi-288b1422a | **GitHub:** github.com/gokulravi1622\n\n---\n\n## Profile Summary\nFull-Stack Software Engineer, MS Information Systems Northeastern University (GPA 3.63, Dec 2025). 3+ years experience shipping production systems using Java, Python, TypeScript, React.js, Node.js, Kafka, and multi-agent AI. Built VabGenRx \u2014 a live production AI healthcare platform with HL7/FHIR data exchange and Azure OpenAI agent orchestration. AWS Certified Cloud Practitioner. Harvard Health Systems Innovation Lab Hackathon 2nd Place (Apr 2026, InterSystems Category).\n\n---\n\n## Base Resume (v2) \u2014 Key Strengths\n- Apache Kafka, AWS Kinesis, GCP Pub/Sub (streaming)\n- HL7/FHIR healthcare interoperability\n- Terraform, Kubernetes, Docker\n- Redis, PostgreSQL, MongoDB, DynamoDB\n- SLO design, OpenTelemetry, Splunk\n- Retry logic and circuit breakers (Tanama)\n- Multi-agent AI (Azure AI Foundry, Azure OpenAI)\n- Problem \u2192 Solution \u2192 Outcome bullet format\n- No hyphens in bullets (recent instruction \u2014 avoids AI-generated appearance)\n- F-1 STEM OPT removed from resume header/summary (recent instruction)\n\n---\n\n## Certifications\n- AWS Certified Cloud Practitioner (Feb 2026) \u2014 Credly: https://www.credly.com/badges/d23f5f8f-a88a-4a6f-9975-08c4c238ea20\n- Harvard Hackathon 2nd Place (Apr 2026) \u2014 Credly: https://www.credly.com/badges/4def5e17-8fe1-434d-bd04-b231995c94a3/public_url\n\n---\n\n## Key Projects\n**VabGenRx** (Live: https://yellow-sea-05177870f.2.azurestaticapps.net/login | GitHub: https://github.com/Aadarsh-Praveen/VabGen-Rx)\nFull-stack AI healthcare platform: React.js, Python FastAPI, Azure Kubernetes, JWT/RBAC, Azure SQL, OpenTelemetry, GitHub Actions CI/CD, HL7/FHIR, Azure OpenAI multi-agent workflows. Outputs in under 90 seconds.\n\n**Heal Hub** (Live: https://deploy-mern-frontend-xi.vercel.app/ | GitHub: https://github.com/gokul-ravi-16/heal_hub)\nMERN stack e-commerce: React.js, Node.js, MongoDB, JWT, RBAC, Stripe, 30+ Jest-tested REST endpoints.\n\n---\n\n## Resume Tailoring Rules\n- Always use gokul_ravi_base_v2.tex as starting point\n- No em dashes (hyphens) in bullets \u2014 use natural sentence flow\n- No F-1 STEM OPT in header or summary\n- ATS score shown after every tailored resume\n- Sponsorship flag checked first for every JD\n- Both VabGenRx (Live + Git) and Heal Hub (Demo + Git) always in projects\n- Output: LaTeX + DOCX + PDF for every resume\n\n---\n\n## Sponsorship Hard Stops (Do Not Apply)\nBlue Origin (citizenship req), iSpot (no OPT), Scaled Cognition (no sponsorship), Manulife (Canadian role), PayPal, Alarm.com, Docusign, GM, BAE Systems, Kratos Defense, ITA International, Canon, Hardin Design\n\n## Explicit Sponsorship Confirmed\nRegrello (\"willing to sponsor US work authorization\") \u2014 top priority\n\n---\n\n## Tailored Resumes Generated This Session\nSage Bionetworks (Java, remote, $72K-$92K), CARFAX (Columbia MO, Java/TDD), WorkOS (Frontend, $175K-$250K), Align Technology (San Jose, full-stack), Regrello (remote, explicit sponsorship, $125K-$220K), Alnylam (Cambridge MA hybrid, $99K-$134K, interview in progress), Superhuman (full-stack, Grammarly/Coda), Ketch (backend Go, SF), Boston Fintech (Python/FastAPI, Boston hybrid), Amazon SDE (Austin/Bellevue), Arrowstreet Capital (Boston, $100K-$215K, quant finance), Misfits Market (remote, $100K-$130K, React/Python), Applied Systems (remote, TypeScript/React/PostgreSQL), Outlier AI (contractor, multi-agent), Microsoft Bing SRE, Frontend React/Node generic\n\n---\n\n## Interview in Progress\n**Alnylam Pharmaceuticals** \u2014 Software Engineer II, Cambridge MA hybrid, $99K-$134K. Resume landed the interview. Focus: Python, JavaScript/TypeScript, React, Flask/FastAPI, AWS, Docker, natural language querying, text-to-SQL, AI-powered scientific data tools.",
+    "tags": [
+      "resume",
+      "job-search",
+      "tailoring",
+      "full-stack",
+      "python",
+      "react",
+      "java",
+      "aws",
+      "boston",
+      "OPT",
+      "AI",
+      "LLM"
+    ],
+    "author": "Gokul Ravi",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "enriched": {
+      "type": "Learning",
+      "summary": "Gokul Ravi's resume tailoring session for job search context.",
+      "flow": {
+        "problem": "Gokul Ravi needed to tailor his resume for job search context.",
+        "action": "A resume tailoring session was conducted to highlight key strengths and certifications.",
+        "outcome": "A tailored resume was created to showcase Gokul Ravi's skills and experience."
+      },
+      "scope": [
+        "Gokul Ravi",
+        "Resume",
+        "Job Search",
+        "Tailoring Session",
+        "Engineering",
+        "AWS Certified Cloud Practitioner",
+        "Harvard Health Systems Innovation Lab Hackathon"
+      ]
+    },
+    "contributed_at": "2026-07-02T04:25:19.803338+00:00"
   }
 ]

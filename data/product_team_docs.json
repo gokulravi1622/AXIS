@@ -2,57 +2,129 @@
   {
     "id": "prd_001",
     "team": "Product",
-    "title": "Product Roadmap — Current Quarter",
+    "title": "Product Roadmap \u2014 Current Quarter",
     "content": "The current quarter roadmap focuses on three themes: Member Engagement (rewards gamification, streak bonuses, leaderboards), Tenant Configurability (self-serve branding, feature flags UI, rewards cap editor), and Platform Health (API rate limiting, audit logging, GDPR data-export tool). Each theme has a designated Product Manager and Engineering lead. Roadmap items are tracked in Jira under the PRD board. Quarterly roadmap reviews occur in the first week of each quarter with all stakeholders.",
-    "tags": ["roadmap", "planning", "quarterly", "themes"]
+    "tags": [
+      "roadmap",
+      "planning",
+      "quarterly",
+      "themes"
+    ]
   },
   {
     "id": "prd_002",
     "team": "Product",
     "title": "Feature Flag Governance",
     "content": "New features must be launched behind a feature flag managed in LaunchDarkly. Flags follow the naming convention: {team}_{feature}_{variant} (e.g., eng_rewards_streaks_v2). Flags have three lifecycle states: development (off for all), rollout (% of users), and GA (on for all). A flag must be cleaned up within 30 days of reaching GA to avoid flag debt. Flag changes in production require approval from the responsible PM. Document all new flags in the Feature Flag Registry Confluence page.",
-    "tags": ["feature-flags", "launchdarkly", "rollout", "governance"]
+    "tags": [
+      "feature-flags",
+      "launchdarkly",
+      "rollout",
+      "governance"
+    ]
   },
   {
     "id": "prd_003",
     "team": "Product",
     "title": "PRD Template and Writing Standards",
     "content": "Every new feature requires a Product Requirements Document (PRD) before engineering work begins. PRD sections: Problem Statement, Goals & Success Metrics, Non-Goals, User Stories, Acceptance Criteria, Dependencies, Open Questions. PRDs are stored in Confluence under Product > PRDs > {Quarter}. Use the HEART framework (Happiness, Engagement, Adoption, Retention, Task Success) for defining success metrics. PRDs must be reviewed by Engineering lead and Design before sprint planning.",
-    "tags": ["prd", "requirements", "process", "documentation"]
+    "tags": [
+      "prd",
+      "requirements",
+      "process",
+      "documentation"
+    ]
   },
   {
     "id": "prd_004",
     "team": "Product",
     "title": "Member Engagement Scoring Model",
     "content": "Member engagement is scored on a 0-100 scale combining: login frequency (25%), health action completions (35%), rewards redemptions (20%), and app session duration (20%). Scores are recomputed nightly via the EngagementScoreJob. Scores feed the member segmentation system used for targeted campaigns. Segments: Dormant (0-20), At-Risk (21-40), Active (41-70), Champion (71-100). Product uses these segments to prioritize re-engagement flows and feature targeting.",
-    "tags": ["engagement", "scoring", "segmentation", "analytics"]
+    "tags": [
+      "engagement",
+      "scoring",
+      "segmentation",
+      "analytics"
+    ]
   },
   {
     "id": "prd_005",
     "team": "Product",
     "title": "Release Process and Launch Checklist",
     "content": "Before any feature launch: 1) PRD signed off by PM and Eng lead. 2) QA sign-off on all acceptance criteria. 3) Legal review if data handling changes. 4) Client Success notified at least 5 business days before GA (use #cs-product-updates Slack channel). 5) Marketing brief sent if user-facing. 6) Rollback plan documented in the release ticket. 7) Monitoring dashboard updated with new feature metrics. Launch day: PM and Eng lead must be available for the first 2 hours post-launch.",
-    "tags": ["release", "launch", "checklist", "process"]
+    "tags": [
+      "release",
+      "launch",
+      "checklist",
+      "process"
+    ]
   },
   {
     "id": "prd_006",
     "team": "Product",
     "title": "User Research and Feedback Loop",
-    "content": "Product conducts bi-weekly user interviews with 3-5 members recruited from the Champion segment. Interview guides and recordings are stored in Dovetail under the relevant research project. Net Promoter Score (NPS) surveys are sent quarterly to all active members; results are shared in the monthly All-Hands. In-app feedback is collected via a persistent feedback widget — tickets auto-create in Jira with the label 'user-feedback'. PMs must triage user-feedback tickets weekly.",
-    "tags": ["user-research", "nps", "feedback", "interviews"]
+    "content": "Product conducts bi-weekly user interviews with 3-5 members recruited from the Champion segment. Interview guides and recordings are stored in Dovetail under the relevant research project. Net Promoter Score (NPS) surveys are sent quarterly to all active members; results are shared in the monthly All-Hands. In-app feedback is collected via a persistent feedback widget \u2014 tickets auto-create in Jira with the label 'user-feedback'. PMs must triage user-feedback tickets weekly.",
+    "tags": [
+      "user-research",
+      "nps",
+      "feedback",
+      "interviews"
+    ]
   },
   {
     "id": "prd_007",
     "team": "Product",
-    "title": "Competitive Intelligence — Benefits Platforms",
+    "title": "Competitive Intelligence \u2014 Benefits Platforms",
     "content": "AXIS competes primarily with Castlight Health, Virgin Pulse, and Wellhub (formerly Gympass). Key differentiators: multi-tenant white-labeling, deep rewards API flexibility, and real-time benefit card issuance. Competitor updates are tracked in the Competitive Intel Notion board. PMs review competitive landscape monthly and flag material changes to the VP of Product. Win/loss analysis is conducted after every closed deal and stored in Salesforce under the Opportunity record.",
-    "tags": ["competitive", "market", "strategy", "positioning"]
+    "tags": [
+      "competitive",
+      "market",
+      "strategy",
+      "positioning"
+    ]
   },
   {
     "id": "prd_008",
     "team": "Product",
     "title": "Accessibility and Compliance Standards",
-    "content": "All member-facing features must meet WCAG 2.1 AA accessibility standards. Accessibility reviews are conducted by the Design team before any UI component ships. HIPAA compliance applies to all features that handle health data — coordinate with Legal for a HIPAA impact assessment on any new health-data feature. GDPR requirements: members must be able to export and delete their data within 30 days of request; the data-export tool is tracked on the Product roadmap. Privacy policy changes require a 30-day advance notice to members.",
-    "tags": ["accessibility", "wcag", "hipaa", "gdpr", "compliance"]
+    "content": "All member-facing features must meet WCAG 2.1 AA accessibility standards. Accessibility reviews are conducted by the Design team before any UI component ships. HIPAA compliance applies to all features that handle health data \u2014 coordinate with Legal for a HIPAA impact assessment on any new health-data feature. GDPR requirements: members must be able to export and delete their data within 30 days of request; the data-export tool is tracked on the Product roadmap. Privacy policy changes require a 30-day advance notice to members.",
+    "tags": [
+      "accessibility",
+      "wcag",
+      "hipaa",
+      "gdpr",
+      "compliance"
+    ]
+  },
+  {
+    "id": "prod_001",
+    "team": "Product",
+    "title": "Cryptocurrency Trading Strategy 2025",
+    "content": "Our organisation currently does not engage in cryptocurrency trading. The official policy as of Q1 2025 is to avoid crypto assets due to regulatory uncertainty and high volatility. All treasury operations are limited to fiat currencies and government bonds. Any proposal to include crypto must go through the CFO and legal team for approval. The strategy is reviewed annually in January.",
+    "tags": [
+      "cryptocurrency",
+      "trading",
+      "strategy",
+      "policy",
+      "treasury"
+    ],
+    "contributed_by": "gokulravi221600@gmail.com",
+    "contributed_at": "2026-07-02T03:35:19.803338+00:00"
+  },
+  {
+    "id": "prod_002",
+    "team": "Product",
+    "title": "MCP (Model Context Protocol) \u2014 Overview & Key Concepts",
+    "content": "**MCP (Model Context Protocol) \u2014 Overview Content**\n\nWhat is MCP?\nMCP is an open standard developed by Anthropic that allows AI models like Claude to securely connect to external tools, data sources, and services.\n\n**How It Works:**\nMCP acts as a bridge between an AI model and the outside world, enabling it to read files and databases, call APIs, interact with apps (Google Drive, Slack, Asana, GitHub), and execute actions on behalf of the user.\n\n**Key Concepts:**\n- MCP Server \u2014 A service that exposes tools/data to the AI\n- MCP Client \u2014 The AI or app that connects to the server\n- Tools \u2014 Functions the AI can call (e.g., search emails, create a task)\n- Resources \u2014 Data the AI can read (e.g., files, database records)\n\n**Why It Matters:**\n- Standardizes how AI connects to external services\n- Removes the need for custom one-off integrations\n- Enables AI agents to take real actions\n- Works across different AI models and platforms\n\n**Real-World Use Cases:**\n- Summarizing emails from Gmail\n- Creating tasks in project management tools\n- Querying a company database\n- Reading and editing documents\n- Automating repetitive workflows\n\n---\n\nAlso shared earlier in this session:\n\n**Weekly Sales Breakdown & Budget Split (already in AXIS as data_009):**\n- Total Weekly Sales: $19,551.93\n- Ordering (60% + $6,000): $17,731.16\n- Savings (40%): $7,820.77",
+    "tags": [
+      "MCP",
+      "model context protocol",
+      "Anthropic",
+      "AI tools",
+      "integrations"
+    ],
+    "author": "Gokul Ravi",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "contributed_at": "2026-07-02T03:55:19.803338+00:00"
   }
 ]

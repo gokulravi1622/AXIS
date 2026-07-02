@@ -4,55 +4,117 @@
     "team": "Data",
     "title": "Data Warehouse Overview",
     "content": "The data warehouse runs on AWS Redshift. It follows a Kimball dimensional model with one big table (OBT) per domain and standard dimension tables (dim_member, dim_tenant, dim_date, dim_plan). All tables are prefixed by domain: rwd_ for rewards, ben_ for benefits, act_ for health actions. Raw data lands in the raw schema, transformed by dbt into the analytics schema. dbt runs nightly at 2am UTC via Airflow DAG warehouse_nightly_refresh.",
-    "tags": ["redshift", "dbt", "warehouse", "kimball"]
+    "tags": [
+      "redshift",
+      "dbt",
+      "warehouse",
+      "kimball"
+    ]
   },
   {
     "id": "data_002",
     "team": "Data",
     "title": "Member Eligibility Pipeline",
     "content": "Eligibility files are delivered by clients as SFTP CSV drops to the /eligibility/{tenant_id}/ S3 bucket folder daily by 6am UTC. The eligibility_ingestion Airflow DAG picks them up, validates schema, deduplicates on member_id + effective_date, and loads into the raw.eligibility table. dbt then transforms into dim_member with active/inactive/terminated status flags. Errors are quarantined to raw.eligibility_quarantine with an error_reason column. Alerts fire to the #data-alerts Slack channel for files missing by 7am.",
-    "tags": ["eligibility", "sftp", "s3", "airflow", "pipeline"]
+    "tags": [
+      "eligibility",
+      "sftp",
+      "s3",
+      "airflow",
+      "pipeline"
+    ]
   },
   {
     "id": "data_003",
     "team": "Data",
     "title": "Rewards Ledger Reporting Model",
-    "content": "The rwd_ledger_obt (one big table) is the source of truth for all reward transactions. Key columns: member_id, tenant_id, transaction_type (earn/redeem/expire/hold/release), amount_cents, transaction_ref_id, created_at, status. The analytics.rwd_summary_daily dbt model aggregates daily totals by tenant and transaction type. For monthly invoicing, use analytics.rwd_invoice_monthly which applies the contracted per-member fee schedule. Do not query the raw ledger directly for reporting — always use the analytics schema models.",
-    "tags": ["rewards", "ledger", "reporting", "dbt", "invoicing"]
+    "content": "The rwd_ledger_obt (one big table) is the source of truth for all reward transactions. Key columns: member_id, tenant_id, transaction_type (earn/redeem/expire/hold/release), amount_cents, transaction_ref_id, created_at, status. The analytics.rwd_summary_daily dbt model aggregates daily totals by tenant and transaction type. For monthly invoicing, use analytics.rwd_invoice_monthly which applies the contracted per-member fee schedule. Do not query the raw ledger directly for reporting \u2014 always use the analytics schema models.",
+    "tags": [
+      "rewards",
+      "ledger",
+      "reporting",
+      "dbt",
+      "invoicing"
+    ]
   },
   {
     "id": "data_004",
     "team": "Data",
-    "title": "LENS Dashboard — Key Metrics Definitions",
-    "content": "LENS is the internal analytics dashboard (Tableau-backed). Key metric definitions: Active Member — a member who completed at least one health action in the last 90 days. Reward Attach Rate — % of active members who earned at least one reward in the period. Redemption Rate — total reward dollars redeemed / total reward dollars earned in the period. Card Utilization — % of issued cards with at least one transaction in the last 30 days. These definitions are contractually aligned with client SLAs — do not change without Client Success sign-off.",
-    "tags": ["lens", "dashboard", "metrics", "tableau", "kpi"]
+    "title": "LENS Dashboard \u2014 Key Metrics Definitions",
+    "content": "LENS is the internal analytics dashboard (Tableau-backed). Key metric definitions: Active Member \u2014 a member who completed at least one health action in the last 90 days. Reward Attach Rate \u2014 % of active members who earned at least one reward in the period. Redemption Rate \u2014 total reward dollars redeemed / total reward dollars earned in the period. Card Utilization \u2014 % of issued cards with at least one transaction in the last 30 days. These definitions are contractually aligned with client SLAs \u2014 do not change without Client Success sign-off.",
+    "tags": [
+      "lens",
+      "dashboard",
+      "metrics",
+      "tableau",
+      "kpi"
+    ]
   },
   {
     "id": "data_005",
     "team": "Data",
     "title": "Synthetic Tenant Data for Testing",
-    "content": "For development and QA, use the synthetic tenant 'DEMO_CORP' (tenant_id: T0000). It has 10,000 synthetic members generated with Faker, with realistic eligibility, action completion, and reward transaction histories spanning 24 months. Refresh synthetic data monthly via the `make synthetic-refresh` command. Never use real member PII in dev/test environments. The synthetic dataset is stored in the dev Redshift cluster — credentials in Vault at /secret/dev/redshift.",
-    "tags": ["synthetic", "testing", "qa", "demo", "pii"]
+    "content": "For development and QA, use the synthetic tenant 'DEMO_CORP' (tenant_id: T0000). It has 10,000 synthetic members generated with Faker, with realistic eligibility, action completion, and reward transaction histories spanning 24 months. Refresh synthetic data monthly via the `make synthetic-refresh` command. Never use real member PII in dev/test environments. The synthetic dataset is stored in the dev Redshift cluster \u2014 credentials in Vault at /secret/dev/redshift.",
+    "tags": [
+      "synthetic",
+      "testing",
+      "qa",
+      "demo",
+      "pii"
+    ]
   },
   {
     "id": "data_006",
     "team": "Data",
-    "title": "CRM Data Sync — Redshift to CRM",
-    "content": "Member segmentation data is synced from Redshift to the CRM platform daily at 8am UTC via a zero-copy data share. The sync includes: member_id, active status, reward balance, last_action_date, cohort_tag, and plan_type. This data powers agent lookup during support calls and marketing segmentation. The sync job is the crm_data_sync Airflow DAG. If agents report stale member data in CRM, check this DAG first — a failed run is the most common cause.",
-    "tags": ["crm", "sync", "airflow", "segmentation", "agents"]
+    "title": "CRM Data Sync \u2014 Redshift to CRM",
+    "content": "Member segmentation data is synced from Redshift to the CRM platform daily at 8am UTC via a zero-copy data share. The sync includes: member_id, active status, reward balance, last_action_date, cohort_tag, and plan_type. This data powers agent lookup during support calls and marketing segmentation. The sync job is the crm_data_sync Airflow DAG. If agents report stale member data in CRM, check this DAG first \u2014 a failed run is the most common cause.",
+    "tags": [
+      "crm",
+      "sync",
+      "airflow",
+      "segmentation",
+      "agents"
+    ]
   },
   {
     "id": "data_007",
     "team": "Data",
     "title": "Invoicing Operations",
-    "content": "Monthly client invoices are generated on the 3rd business day of each month. The invoice covers: per-member-per-month (PMPM) platform fee, card issuance fees ($1.50/card), and reward distribution fees (% of redemptions). Source data: analytics.rwd_invoice_monthly and analytics.ben_invoice_monthly dbt models. Invoice generation script: scripts/invoicing/generate_invoice.py — takes tenant_id and billing_month as args. Output is a PDF + CSV pair uploaded to S3 and emailed to the client finance contact on record.",
-    "tags": ["invoicing", "billing", "pmpm", "finance", "monthly"]
+    "content": "Monthly client invoices are generated on the 3rd business day of each month. The invoice covers: per-member-per-month (PMPM) platform fee, card issuance fees ($1.50/card), and reward distribution fees (% of redemptions). Source data: analytics.rwd_invoice_monthly and analytics.ben_invoice_monthly dbt models. Invoice generation script: scripts/invoicing/generate_invoice.py \u2014 takes tenant_id and billing_month as args. Output is a PDF + CSV pair uploaded to S3 and emailed to the client finance contact on record.",
+    "tags": [
+      "invoicing",
+      "billing",
+      "pmpm",
+      "finance",
+      "monthly"
+    ]
   },
   {
     "id": "data_008",
     "team": "Data",
     "title": "Data Quarantine Process",
     "content": "Records that fail validation during ingestion are written to quarantine tables (raw.*_quarantine). Each quarantine record has: source_file, error_reason, raw_row, quarantined_at. The data team reviews quarantine daily. Resolution options: fix_and_reprocess (correct the source data and re-ingest), drop (discard invalid record with documentation), or escalate_to_client (request corrected file from client). Quarantine SLA: all records resolved or escalated within 2 business days. Track in the Data Quarantine Jira board.",
-    "tags": ["quarantine", "data-quality", "validation", "ingestion"]
+    "tags": [
+      "quarantine",
+      "data-quality",
+      "validation",
+      "ingestion"
+    ]
+  },
+  {
+    "id": "data_009",
+    "team": "Data",
+    "title": "Weekly Sales Breakdown & Budget Split",
+    "content": "Weekly sales totals and budget allocation calculation.\n\n**Daily Sales:**\n- Monday: $1,662.64\n- Tuesday: $1,422.05\n- Wednesday: $4,138.21\n- Thursday: $3,187.74\n- Friday: $4,887.44\n- Saturday: $2,681.89\n- Sunday: $1,571.96\n\n**Total Weekly Sales: $19,551.93**\n\n**Budget Split:**\n- Ordering (60% + additional $6,000): $17,731.16\n- Savings (40%): $7,820.77",
+    "tags": [
+      "sales",
+      "weekly",
+      "budget",
+      "ordering",
+      "savings"
+    ],
+    "author": "Gokul Ravi",
+    "contributed_by": "gokulravi.engineer@gmail.com",
+    "contributed_at": "2026-07-02T03:45:19.803338+00:00"
   }
 ]

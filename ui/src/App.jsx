@@ -7,6 +7,7 @@ import InputBar from './components/InputBar'
 import ToastContainer from './components/Toast'
 import Login from './components/Login'
 import Onboarding from './components/Onboarding'
+import RequestContextModal from './components/RequestContextModal'
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('axis_theme') || 'dark')
@@ -22,6 +23,9 @@ export default function App() {
   const [syncLog, setSyncLog] = useState([])
   const [loading, setLoading] = useState(false)
   const [toasts, setToasts] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [contextRequests, setContextRequests] = useState({ sent: [], received: [] })
+  const [requestTopic, setRequestTopic] = useState(null)
   const chatEndRef = useRef(null)
   const lastSeenTs = useRef(null)
   const inputBarRef = useRef(null)
@@ -71,6 +75,8 @@ export default function App() {
     setMessages([])
     setConversations([])
     setCurrentConvId(null)
+    setNotifications([])
+    setContextRequests({ sent: [], received: [] })
   }, [])
 
   // ── Conversations (multi-chat) ──────────────────────────────────────────────
@@ -83,6 +89,36 @@ export default function App() {
   }, [token])
 
   useEffect(() => { if (user) loadConversations() }, [user, loadConversations])
+
+  // ── Notifications + Context Requests ───────────────────────────────────────
+  const loadNotifications = useCallback(async () => {
+    if (!token) return
+    try {
+      const [notifRes, reqRes] = await Promise.all([
+        fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/context-requests', { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      if (notifRes.ok) {
+        const data = await notifRes.json()
+        setNotifications(data.notifications || [])
+      }
+      if (reqRes.ok) {
+        const data = await reqRes.json()
+        setContextRequests(data || { sent: [], received: [] })
+      }
+    } catch {}
+  }, [token])
+
+  useEffect(() => {
+    if (user) loadNotifications()
+  }, [user, loadNotifications])
+
+  // Poll notifications every 30s
+  useEffect(() => {
+    if (!token) return
+    const interval = setInterval(loadNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [token, loadNotifications])
 
   const handleNewChat = useCallback(() => {
     setMessages([])
@@ -211,7 +247,7 @@ export default function App() {
             } else if (evt.type === 'token') {
               setMessages(prev => prev.map(m => m.id === streamId ? { ...m, content: m.content + evt.text } : m))
             } else if (evt.type === 'done') {
-              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, streaming: false } : m))
+              setMessages(prev => prev.map(m => m.id === streamId ? { ...m, streaming: false, noContext: (m.sources || []).length === 0 } : m))
             } else if (evt.type === 'conversation_id') {
               if (evt.id !== currentConvId) setCurrentConvId(evt.id)
               loadConversations()
@@ -307,13 +343,37 @@ export default function App() {
         onDeleteConversation={handleDeleteConversation}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-        <Header teamFilter={teamFilter} user={user} onLogout={handleLogout} theme={theme} setTheme={setTheme} />
+        <Header
+          teamFilter={teamFilter}
+          user={user}
+          onLogout={handleLogout}
+          theme={theme}
+          setTheme={setTheme}
+          notifications={notifications}
+          requests={contextRequests}
+          token={token}
+          onNotifAction={loadNotifications}
+        />
         <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-          <ChatArea messages={messages} loading={loading} onSuggest={handleSend} onFeedback={handleFeedback} />
+          <ChatArea
+            messages={messages}
+            loading={loading}
+            onSuggest={handleSend}
+            onFeedback={handleFeedback}
+            onRequestContext={setRequestTopic}
+            token={token}
+          />
           <div ref={chatEndRef} />
         </div>
         <InputBar ref={inputBarRef} onSend={handleSend} disabled={loading} />
       </div>
+      {requestTopic && (
+        <RequestContextModal
+          topic={requestTopic}
+          token={token}
+          onClose={() => setRequestTopic(null)}
+        />
+      )}
     </div>
   )
 }
