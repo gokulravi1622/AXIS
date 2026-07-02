@@ -299,26 +299,38 @@ read
                     </BigBtn>
                   </>
                 )
-              ) : (
-                /* hosted: show connection status + setup guide */
-                <>
-                  {mcpStatus?.connected && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 12, marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block', boxShadow: '0 0 6px #10B981' }} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#10B981' }}>Connected to Claude Desktop</span>
-                      </div>
-                      <button
-                        onClick={handleDisconnect}
-                        disabled={disconnecting}
-                        style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
-                      >
-                        {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-                      </button>
+              ) : mcpStatus?.connected ? (
+                /* hosted: connected state */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ textAlign: 'center', padding: '20px 0 8px' }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(16,185,129,0.12)', border: '2px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>
+                      <img src="/claude.png" alt="Claude" style={{ width: 26, height: 26, objectFit: 'contain' }} />
                     </div>
-                  )}
-                  <TerminalGuide token={token} />
-                </>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 4 }}>
+                      Connected to Claude Desktop
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, color: '#10B981' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', display: 'inline-block', boxShadow: '0 0 6px #10B981' }} />
+                      Active
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6 }}>
+                    AXIS tools are available in Claude Desktop. Try:<br />
+                    <strong style={{ color: 'var(--text1)' }}>"Use AXIS to search for Redis"</strong>
+                  </div>
+
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={disconnecting}
+                    style={{ width: '100%', height: 38, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'Inter, sans-serif', transition: 'all 0.15s' }}
+                  >
+                    {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                </div>
+              ) : (
+                /* hosted: not connected — show setup guide */
+                <TerminalGuide token={token} />
               )}
             </div>
           )}
